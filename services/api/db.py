@@ -75,3 +75,29 @@ def load_game(gid: str):
         if not row:
             return None
         return {"account_id": row[0], "ephemeral": row[1], "seed": row[2], "state_json": row[3]}
+
+
+def append_events(gid: str, day: str, events: list) -> None:
+    conn = get_conn()
+    if conn is None:
+        return
+    with conn.cursor() as cur:
+        cur.execute("INSERT INTO game_events(game_id, day, events_json) VALUES (%s, %s, %s::jsonb)",
+                    (gid, day, json.dumps(events)))
+
+
+def load_history(gid: str, limit: int = 60):
+    conn = get_conn()
+    if conn is None:
+        return None
+    with conn.cursor() as cur:
+        cur.execute("SELECT day, events_json FROM game_events WHERE game_id=%s ORDER BY id DESC LIMIT %s", (gid, limit))
+        return [{"day": r[0], "events": r[1]} for r in cur.fetchall()]
+
+
+def clear_history(gid: str) -> None:
+    conn = get_conn()
+    if conn is None:
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM game_events WHERE game_id=%s", (gid,))

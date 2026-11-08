@@ -1,25 +1,28 @@
 """API TecRural — cuentas, partidas, permisos y consultas. Sin lógica científica duplicada."""
 from __future__ import annotations
+import datetime as dt
 import json
 import uuid
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from packages.simulator.engine import SimState, ParcelState, ParcelAction, WeatherDay, step
+from packages.simulator.engine import SimState, ParcelState, ParcelAction, WeatherDay, step, step_week
 
 try:
-    from services.api.db import init_schema, save_game, load_game, using_db, database_configured
+    from services.api.db import (init_schema, save_game, load_game, append_events, load_history,
+                                 clear_history, database_configured)
 except ImportError:  # ejecución como paquete raíz distinto
-    from db import init_schema, save_game, load_game, using_db, database_configured  # type: ignore
+    from db import init_schema, save_game, load_game, append_events, load_history, clear_history, database_configured  # type: ignore
 
 BASE = Path(__file__).resolve().parents[2]
 PARAMS = json.loads((BASE / "packages/content/default_game_params.json").read_text(encoding="utf-8"))
 
-app = FastAPI(title="TecRural API", version="0.2.0")
+app = FastAPI(title="TecRural API", version="1.0.0")
 
 # Fallback memoria para dev sin DB. Con DATABASE_URL se persiste en Neon.
 GAMES: dict[str, dict] = {}
+HIST: dict[str, list] = {}
 _DB_OK = False
 try:
     _DB_OK = bool(init_schema())
@@ -33,7 +36,7 @@ class NewGame(BaseModel):
 
 class DayAction(BaseModel):
     parcel_id: str
-    irrigation_mm: float = 0.0
+    irrigation_mm: float = Field(default=0.0, ge=0, le=100)
     harvest: bool = False
     prune: bool = False
     scout: bool = False
@@ -42,9 +45,22 @@ class DayAction(BaseModel):
 
 class AdvanceDay(BaseModel):
     actions: list[DayAction] = []
-    precip_mm: float = 2.0
-    et0_mm: float = 3.5
+    precip_mm: float = Field(default=2.0, ge=0, le=500)
+    et0_mm: float = Field(default=3.5, ge=0, le=15)
     kind: str = "simulado"  # escenario ficticio etiquetado
+
+
+class AdvanceWeek(AdvanceDay):
+    days: int = Field(default=7, ge=1, le=14)
+
+
+class ParcelEdit(BaseModel):
+    area_ha: float | None = Field(default=None, ge=0.1, le=10)
+
+
+class FarmEdit(BaseModel):
+    parcels: dict[str, ParcelEdit] = {}
+    cash_eur: float | None = Field(default=None, ge=0, le=1000000)
 
 
 def _new_state() -> SimState:
@@ -69,15 +85,56 @@ def _restore_state(data: dict) -> SimState:
     )
 
 
+def _get(gid: str) -> dict:
+    g = GAMES.get(gid)
+    if g is None and _DB_OK:
+        try:
+            row = load_game(gid)
+        except Exception:
+            row = None
+        if row:
+            data = row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"])
+            g = {"state": _restore_state(data), "account": row["account_id"],
+                 "ephemeral": row["ephemeral"], "seed": row["seed"]}
+            GAMES[gid] = g
+    if not g:
+        raise HTTPException(404, "partida no encontrada")
+    return g
+
+
+def _persist(gid: str, g: dict) -> None:
+    GAMES[gid] = g
+    if _DB_OK:
+        try:
+            save_game(gid, None, g["ephemeral"], g["seed"], g["state"])
+        except Exception:
+            pass
+
+
+def _record(gid: str, day: str, events: list) -> None:
+    HIST.setdefault(gid, []).append({"day": day, "events": events})
+    if _DB_OK:
+        try:
+            append_events(gid, day, events)
+        except Exception:
+            pass
+
+
+def _to_actions(body: AdvanceDay) -> dict[str, ParcelAction]:
+    return {a.parcel_id: ParcelAction(irrigation_mm=a.irrigation_mm, harvest=a.harvest,
+            prune=a.prune, scout=a.scout, fertilize_abstract=a.fertilize_abstract) for a in body.actions}
+
+
 @app.post("/games")
 def create_game(body: NewGame):
     gid = uuid.uuid4().hex[:8]
     st = _new_state()
-    rec = {"state": st, "account": body.account, "ephemeral": body.account is None, "seed": 1234}
-    GAMES[gid] = rec
+    g = {"state": st, "account": body.account, "ephemeral": body.account is None, "seed": 1234}
+    _persist(gid, g)
+    HIST[gid] = []
     if _DB_OK:
         try:
-            save_game(gid, None, rec["ephemeral"], rec["seed"], st)
+            clear_history(gid)
         except Exception:
             pass
     return {"game_id": gid, "ephemeral": body.account is None,
@@ -88,54 +145,95 @@ def create_game(body: NewGame):
 
 @app.get("/games/{gid}")
 def get_game(gid: str):
-    g = GAMES.get(gid)
-    if g is None and _DB_OK:
-        try:
-            row = load_game(gid)
-        except Exception:
-            row = None
-        if row:
-            st = _restore_state(row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"]))
-            g = {"state": st, "account": row["account_id"], "ephemeral": row["ephemeral"], "seed": row["seed"]}
-            GAMES[gid] = g
-    if not g:
-        raise HTTPException(404, "partida no encontrada")
+    g = _get(gid)
     st: SimState = g["state"]
     return {"cash_eur": st.cash_eur, "reservoir_m3": st.reservoir_m3, "day": st.day,
-            "parcels": [{"id": p.id, "crop": p.crop, "soil_water_mm": p.soil_water_mm,
+            "parcels": [{"id": p.id, "crop": p.crop, "area_ha": p.area_ha, "soil_water_mm": p.soil_water_mm,
                          "health": p.health_0_1, "pending_kg": p.pending_fruit_kg} for p in st.parcels],
             "persistencia": "neon" if _DB_OK else "memoria-local"}
 
 
-@app.post("/games/{gid}/advance")
-def advance(gid: str, body: AdvanceDay):
-    g = GAMES.get(gid)
-    if g is None and _DB_OK:
-        try:
-            row = load_game(gid)
-        except Exception:
-            row = None
-        if row:
-            g = {"state": _restore_state(row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"])),
-                 "account": row["account_id"], "ephemeral": row["ephemeral"], "seed": row["seed"]}
-            GAMES[gid] = g
-    if not g:
-        raise HTTPException(404, "partida no encontrada")
+@app.put("/games/{gid}")
+def edit_farm(gid: str, body: FarmEdit):
+    """Edición de finca ficticia. Límites 0.1-10 ha y validación como restricción de interfaz (juego)."""
+    g = _get(gid)
     st: SimState = g["state"]
-    acts = {a.parcel_id: ParcelAction(irrigation_mm=a.irrigation_mm, harvest=a.harvest,
-                                     prune=a.prune, scout=a.scout,
-                                     fertilize_abstract=a.fertilize_abstract) for a in body.actions}
-    import datetime as dt
-    d = dt.date.fromisoformat(st.day) + dt.timedelta(days=1)
-    w = WeatherDay(date=d.isoformat(), precip_mm=body.precip_mm, et0_mm=body.et0_mm, kind=body.kind)  # type: ignore
-    out = step(st, acts, w, PARAMS, rng_seed=g["seed"])
-    g["seed"] += 1
+    for pid, pe in body.parcels.items():
+        p = next((x for x in st.parcels if x.id == pid), None)
+        if not p:
+            raise HTTPException(404, f"parcela {pid} no existe")
+        if pe.area_ha is not None:
+            p.area_ha = pe.area_ha
+    if body.cash_eur is not None:
+        st.cash_eur = body.cash_eur
+    _persist(gid, g)
+    return get_game(gid)
+
+
+@app.post("/games/{gid}/restart")
+def restart(gid: str):
+    g = _get(gid)
+    st = _new_state()
+    g["state"] = st
+    g["seed"] = 1234
+    HIST[gid] = []
+    _persist(gid, g)
     if _DB_OK:
         try:
-            save_game(gid, None, g["ephemeral"], g["seed"], st)
+            clear_history(gid)
         except Exception:
             pass
+    return get_game(gid)
+
+
+def _next_days(start_day: str, n: int, body: AdvanceDay) -> list[WeatherDay]:
+    d0 = dt.date.fromisoformat(start_day)
+    return [WeatherDay(date=(d0 + dt.timedelta(days=i + 1)).isoformat(),
+                       precip_mm=body.precip_mm, et0_mm=body.et0_mm, kind=body.kind)  # type: ignore
+            for i in range(n)]
+
+
+@app.post("/games/{gid}/advance")
+def advance(gid: str, body: AdvanceDay):
+    g = _get(gid)
+    st: SimState = g["state"]
+    try:
+        out = step(st, _to_actions(body), _next_days(st.day, 1, body)[0], PARAMS, rng_seed=g["seed"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    g["seed"] += 1
+    _record(gid, out["state"]["day"], out["events"])
+    _persist(gid, g)
     return out
+
+
+@app.post("/games/{gid}/advance_week")
+def advance_week(gid: str, body: AdvanceWeek):
+    """Avance semanal determinista: N pasos diarios con las mismas acciones (equivale a N avances diarios)."""
+    g = _get(gid)
+    st: SimState = g["state"]
+    try:
+        out = step_week(st, _to_actions(body), _next_days(st.day, body.days, body), PARAMS, rng_seed=g["seed"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    g["seed"] += body.days
+    _record(gid, out["state"]["day"], out["events"])
+    _persist(gid, g)
+    return out
+
+
+@app.get("/games/{gid}/history")
+def history(gid: str):
+    _get(gid)
+    if _DB_OK:
+        try:
+            rows = load_history(gid)
+            if rows:
+                return {"history": rows, "fuente": "neon"}
+        except Exception:
+            pass
+    return {"history": HIST.get(gid, []), "fuente": "memoria-local",
+            "nota": "juego: explica efectos y costes por día; incertidumbre y procedencia en cada avance"}
 
 
 @app.get("/health")

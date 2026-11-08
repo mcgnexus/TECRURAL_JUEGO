@@ -1,4 +1,4 @@
--- Esquema TecRural como código (v1). Ejecutar con conexión directa para migraciones
+-- Esquema TecRural como código (v2). Ejecutar con conexión directa para migraciones
 -- serias; este DDL inicial es seguro en pooled con autocommit.
 CREATE TABLE IF NOT EXISTS accounts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -17,3 +17,13 @@ CREATE TABLE IF NOT EXISTS games (
 );
 
 CREATE INDEX IF NOT EXISTS idx_games_account ON games(account_id);
+
+-- Historial de eventos por día (explica efectos y costes).
+CREATE TABLE IF NOT EXISTS game_events (
+  id BIGSERIAL PRIMARY KEY,
+  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  events_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_events_game ON game_events(game_id, id);

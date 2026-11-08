@@ -74,9 +74,25 @@ def _validate(state: SimState, actions: dict[str, ParcelAction], weather: Weathe
     for p in state.parcels:
         a = actions.get(p.id, ParcelAction())
         if a.irrigation_mm < 0 or a.irrigation_mm > 100:
-            errors.append(f"riego imposible en {p.id}: {a.irrigation_mm} mm")
-        if p.area_ha <= 0:
-            errors.append(f"superficie inválida en {p.id}")
+            errors.append(f"riego fuera de rango 0-100 mm en {p.id} (restricción de interfaz, juego)")
+        if p.area_ha < 0.1 or p.area_ha > 10:
+            errors.append(f"superficie fuera de rango 0.1-10 ha en {p.id} (restricción de interfaz, juego)")
+    if errors:
+        return errors
+    # Consistencia caja y depósito (juego): el riego pedido debe caber en lo disponible.
+    cost_m3 = 0.25
+    try:
+        c = parameters.get("costs_eur_game", {})
+        if isinstance(c, dict):
+            cost_m3 = float(c.get("irrigation_eur_per_m3", 0.25))
+    except Exception:
+        pass
+    need_m3 = sum(actions.get(p.id, ParcelAction()).irrigation_mm * p.area_ha * 10.0 for p in state.parcels)
+    need_eur = need_m3 * cost_m3
+    if need_m3 > state.reservoir_m3 + 1e-9:
+        errors.append(f"agua insuficiente: piden {need_m3:.0f} m³ y hay {state.reservoir_m3:.0f} m³ (juego)")
+    if need_eur > state.cash_eur + 1e-9:
+        errors.append(f"caja insuficiente: riego cuesta {need_eur:.2f} € y hay {state.cash_eur:.2f} € (juego)")
     return errors
 
 
@@ -131,6 +147,14 @@ def step(
         day_cost = irr_cost
         if a.prune or a.scout or a.fertilize_abstract:
             day_cost += 20.0  # mano de obra abstracta de juego
+        if a.irrigation_mm > 0:
+            events.append({"type": "riego", "parcel": p.id, "mm": a.irrigation_mm,
+                           "m3": round(irr_m3, 1), "coste_eur": round(irr_cost, 2),
+                           "nota": "juego: lámina×superficie×10 con eficiencia aplicada"})
+        if day_cost >= 20.0 and (a.prune or a.scout or a.fertilize_abstract):
+            acts = [k for k, v in {"poda": a.prune, "vigilancia": a.scout, "abono_abstracto": a.fertilize_abstract}.items() if v]
+            events.append({"type": "labor", "parcel": p.id, "tareas": acts, "coste_eur": 20.0,
+                           "nota": "juego: coste abstracto, sin dosis real"})
         p.cum_costs_eur = round(p.cum_costs_eur + day_cost, 2)
 
         # Sanidad simplificada de juego (no diagnóstico real)
