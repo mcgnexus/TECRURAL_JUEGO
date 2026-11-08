@@ -1,0 +1,12 @@
+{
+  "nota": "Variedades iniciales de JUEGO elegidas por criterio de dominancia comercial en Costa Tropical. No son recomendación varietal real. Revisor técnico pendiente.",
+  "origen": "eleccion-de-juego",
+  "evidence_level": "juego",
+  "fecha": "2026-11-08",
+  "revisor": "pendiente-tecnico-colaborador",
+  "cultivos": [
+    {"parcela": "P1", "especie": "aguacate", "variedad": "Hass", "edad_anios": 6, "densidad_arb_ha": 400, "marco": "5x5 m (juego)", "riego": "goteo (juego)", "estado": "productiva", "motivo": "variedad dominante en la zona; 6 años = plena producción temprana en juego"},
+    {"parcela": "P2", "especie": "mango", "variedad": "Osteen", "edad_anios": 8, "densidad_arb_ha": 300, "marco": "6x5.5 m aprox (juego)", "riego": "goteo (juego)", "estado": "productiva", "motivo": "variedad dominante Costa Tropical; 8 años = adulta en juego"},
+    {"parcela": "P3", "especie": "chirimoyo", "variedad": "Fino de Jete", "edad_anios": 10, "densidad_arb_ha": 300, "marco": "juego", "riego": "goteo (juego)", "estado": "productiva", "motivo": "variedad autóctona de referencia; 10 años = adulta en juego"}
+  ]
+}

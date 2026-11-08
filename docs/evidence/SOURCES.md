@@ -1,18 +1,18 @@
-# Registro de fuentes y evidencia — PLANTILLA (completar con URL oficial y revisión)
+# Registro de fuentes y evidencia — rev. 2026-11-08 (Fase 0)
 
 No inferir derechos de redistribución, calidad parcelaria ni existencia de API desde una web. Estación cercana ≠ microclima parcela. ET0 estación ≠ ET parcela.
 
 | Fuente | Uso propuesto | URL oficial | Titular | Cobertura esp./temp. | Licencia / atribución / uso comercial | Frecuencia / latencia | Auth / límites / coste | Formato | Responsable | Fecha revisión | Estado |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| AEMET OpenData | obs., predicción, avisos | — | — | — | — | — | clave pendiente, no usar sin verificar | JSON | — | 2026-11-08 | pendiente |
-| SiAR + manual API | series agroclimáticas, ET0 | — | — | — | — | — | alta pendiente | — | — | 2026-11-08 | pendiente |
-| Open-Meteo | predicción/modelizado complementario | — | — | — | según licencia, distinguir modelo de medición | — | — | JSON | — | 2026-11-08 | pendiente |
-| RAIF Andalucía | contexto fitosanitario | — | — | comprobar cultivo/zona | método acceso permitido pendiente | — | — | — | — | 2026-11-08 | pendiente, aviso regional ≠ diagnóstico |
+| AEMET OpenData | obs., predicción, avisos | https://opendata.aemet.es | AEMET | España/municipio (ej. Motril 18140) | condiciones por producto, verificar | diaria | AEMET_API_KEY solo servidor, verificado 2026-11-08 | JSON (meta→datos) | — | 2026-11-08 | verificado predicción diaria |
+| RIA Andalucía / SiAR | series agroclimáticas, ET0 | https://www.juntadeandalucia.es/agriculturaypesca/ifapa/riaweb/web/inicio_estaciones · https://servicio.mapa.gob.es/siarweb/ | IFAPA / MAPA | 100 estaciones Andalucía desde 1999; horaria/diaria/semanal/mensual | datos abiertos (política institucional); comercial por verificar | medio-horaria→mensual | "Mi SiAR" con registro; manual API PDF; sin clave aún | web/CSV/API | — | 2026-11-08 | pendiente alta y estación útil (ET0 estación ≠ ET parcela) |
+| Open-Meteo | predicción/modelizado complementario | https://api.open-meteo.com | Open-Meteo | global, 16 días | según licencia, distinguir modelo de medición | horaria/diaria | sin clave uso estándar, verificado 2026-11-08 | JSON | — | 2026-11-08 | verificado complementario |
+| RAIF Andalucía | contexto fitosanitario | https://www.juntadeandalucia.es/organismos/agriculturapescaaguaydesarrollorural/areas/agricultura/sanidad-vegetal/paginas/web-raif.html · ficha datos.gob.es | Junta Andalucía | cultivos Producción Integrada Andalucía; visor SIG semanal; 200+ estaciones clima | acceso web/app; sin API inferida | semanal | app RAIF; método permitido: portal/app | web/app | — | 2026-11-08 | pendiente cobertura subtropicales; aviso regional ≠ diagnóstico |
 | FAO AquaCrop / FAO-56 | balance hídrico, ET | — | FAO | — | evaluar licencia; NO asumir calibración en estos frutales | — | — | — | — | 2026-11-08 | pendiente |
 | IFAPA subtropicales | contraste local | — (publicación primaria concreta pendiente) | — | — | — | — | — | — | — | 2026-11-08 | laguna: sin publicación identificada |
 | Registro MAPA fitosanitarios | estado/usos autorizados | — | MAPA | — | verificar fecha/cultivo/plaga/etiqueta | — | — | — | — | 2026-11-08 | pendiente, sin recomendación accionable |
-| Fincas/técnicos | calibración | — | — | — | requiere acuerdo, consentimiento, control acceso; no asumir datos | — | — | — | — | 2026-11-08 | bloqueado hasta acuerdo |
+| Fincas/técnicos | calibración | — | — | plantilla en data/fincas/ | requiere acuerdo firmado; sin acuerdo no hay datos | — | — | CSV | — | 2026-11-08 | bloqueado hasta acuerdo |
 | Precios/mercados oficiales | ingresos históricos | — | — | producto/categoría/origen/unidad/fecha pendientes | históricos ≠ futuros | — | — | — | — | 2026-11-08 | pendiente |
 | Cartografía/suelos oficiales | contexto geográfico | — | — | revisar precisión | regional ≠ análisis parcela | — | — | — | — | 2026-11-08 | pendiente |
 
-Lagunas registradas: sin variedades, métricas validación, plazo/presupuesto/proveedor fijados. Sin claves meteorológicas en repo. Sin contacto con colaboradores sin autorización.
+Verificaciones sin exponer claves: AEMET (predicción 18140 OK), Open-Meteo (daily 2 días OK), DeepSeek (explicación juego OK). SiAR/RAIF: comprobadas web oficial y mecanismo de acceso, sin consultas con clave aún.

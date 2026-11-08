@@ -1,0 +1,2 @@
+finca_id,parcela_id,campaña,fecha,especie,variedad,edad_anios,superficie_ha,marco,riego_tipo,riego_medido_m3,suelo_textura,cosecha_comercial_kg,clima_estacion_id,distancia_m,altitud_m,manejo_notas,cambios_relevantes,responsable,permiso_ref
+EJEMPLO-SINTETICO,P1,2025-26,2026-01-02,aguacate,Hass,6,1.0,5x5,goteo,,,,ficticia,,,,,permiso-pendiente
