@@ -8,5 +8,7 @@ build/
 .env
 *.db
 *.sqlite
+data/cache/
+data/snapshots/
 .DS_Store
 opencode-*.json

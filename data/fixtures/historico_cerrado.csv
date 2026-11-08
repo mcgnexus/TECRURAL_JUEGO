@@ -1,0 +1,16 @@
+date,precip_mm,et0_mm,tmin_c,tmax_c,kind,station_id
+2026-10-25,0.0,2.85,15.8,22.7,estimacion,motril-18140
+2026-10-26,0.0,2.81,18.5,23.2,estimacion,motril-18140
+2026-10-27,0.0,2.62,17.4,22.9,estimacion,motril-18140
+2026-10-28,0.0,2.98,19.3,24.5,estimacion,motril-18140
+2026-10-29,0.0,2.73,18.9,23.3,estimacion,motril-18140
+2026-10-30,0.0,2.12,18.1,22.3,estimacion,motril-18140
+2026-10-31,0.0,2.66,17.8,23.0,estimacion,motril-18140
+2026-11-01,0.0,2.14,17.8,22.0,estimacion,motril-18140
+2026-11-02,0.0,2.61,17.1,22.3,estimacion,motril-18140
+2026-11-03,0.0,2.29,16.3,21.1,estimacion,motril-18140
+2026-11-04,2.6,1.29,16.7,19.6,estimacion,motril-18140
+2026-11-05,0.0,2.21,15.0,21.0,estimacion,motril-18140
+2026-11-06,0.0,2.45,16.6,21.8,estimacion,motril-18140
+2026-11-07,0.0,2.31,16.9,21.1,estimacion,motril-18140
+2026-11-08,0.3,1.62,18.4,22.4,estimacion,motril-18140

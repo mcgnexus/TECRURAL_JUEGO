@@ -72,12 +72,24 @@ export default function App() {
     try {
       const j = await api(`/games/${gameId}${week ? '/advance_week' : '/advance'}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) })
+      afterAdvance(j)
+    } catch (e: any) { setMsg(`No se pudo avanzar: ${e.message || e}. Sin conexión el juego no finge datos actuales.`) }
+  }
+  async function advanceWeather() {
+    if (!gameId) return
+    setMsg('Consultando clima real de Motril (AEMET/Open-Meteo)…')
+    try {
+      const j = await api(`/games/${gameId}/advance_weather`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ actions: payload().actions, provider: 'auto', days: 1 }) })
+      afterAdvance(j, `Clima real: ${j.weather_snapshot?.serie_kind || ''} ${(j.weather_snapshot?.dias || []).join(',')} · estación Motril 18140 (≠ microclima parcela).`)
+    } catch (e: any) { setMsg(`Clima no disponible: ${e.message || e}. Prueba con avance simulado.`) }
+  }
+  function afterAdvance(j: any, extra?: string) {
       setInfo({ cash_eur: j.indicators.cash_eur, reservoir_m3: j.indicators.reservoir_m3, day: j.state.day,
         parcels: j.state.parcels.map((p: any) => ({ id: p.id, crop: p.crop, area_ha: p.area_ha, soil_water_mm: p.soil_water_mm, health: p.health_0_1, pending_kg: p.pending_fruit_kg })),
         prov: j.provenance })
-      const h = await api(`/games/${gameId}/history`)
-      setHist(h.history || [])
-    } catch (e: any) { setMsg(`No se pudo avanzar: ${e.message || e}. Sin conexión el juego no finge datos actuales.`) }
+      api(`/games/${gameId}/history`).then(h => setHist(h.history || [])).catch(() => {})
+      if (extra) setMsg(extra)
   }
   async function saveAreas() {
     if (!gameId) return
@@ -149,6 +161,7 @@ export default function App() {
         <button onClick={newGame} style={{ flex: 1, minHeight: 52, fontSize: 17 }}>Nueva finca</button>
         <button onClick={() => advance(false)} disabled={!gameId} style={{ flex: 1, minHeight: 52, fontSize: 17 }}>Avanzar 1 día</button>
         <button onClick={() => advance(true)} disabled={!gameId} style={{ flex: 1, minHeight: 52, fontSize: 17 }}>Avanzar semana</button>
+        <button onClick={advanceWeather} disabled={!gameId} style={{ flex: 1, minHeight: 52, fontSize: 17 }}>Clima real Motril</button>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         <button onClick={saveAreas} disabled={!gameId} style={{ flex: 1, minHeight: 48 }}>Guardar finca</button>

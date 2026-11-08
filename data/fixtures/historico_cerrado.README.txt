@@ -1,0 +1,2 @@
+historico_cerrado.csv: pasada modelizada Open-Meteo (past) grabada como serie cerrada reproducible.
+kind=estimacion (modelo, NO observación). Estación: motril-18140. Ver scenarios.historico_cerrado.

@@ -18,7 +18,13 @@ except ImportError:  # ejecución como paquete raíz distinto
 BASE = Path(__file__).resolve().parents[2]
 PARAMS = json.loads((BASE / "packages/content/default_game_params.json").read_text(encoding="utf-8"))
 
+try:
+    from services.api.weather import router as weather_router
+except ImportError:
+    from weather import router as weather_router  # type: ignore
+
 app = FastAPI(title="TecRural API", version="1.0.0")
+app.include_router(weather_router)
 
 # Fallback memoria para dev sin DB. Con DATABASE_URL se persiste en Neon.
 GAMES: dict[str, dict] = {}
@@ -52,6 +58,14 @@ class AdvanceDay(BaseModel):
 
 class AdvanceWeek(AdvanceDay):
     days: int = Field(default=7, ge=1, le=14)
+
+
+class AdvanceWeather(BaseModel):
+    actions: list[DayAction] = []
+    provider: str = "auto"  # auto|aemet|openmeteo
+    station: str | None = None
+    days: int = Field(default=3, ge=1, le=7)
+    permitir_ficticio: bool = False  # si True, días con hueco usan simulado etiquetado
 
 
 class ParcelEdit(BaseModel):
@@ -234,6 +248,78 @@ def history(gid: str):
             pass
     return {"history": HIST.get(gid, []), "fuente": "memoria-local",
             "nota": "juego: explica efectos y costes por día; incertidumbre y procedencia en cada avance"}
+
+
+@app.post("/games/{gid}/advance_weather")
+def advance_weather(gid: str, body: AdvanceWeather):
+    """Avanza con clima real normalizado (escenario presente_con_prevision).
+
+    Guarda instantánea por día: la campaña se reproduce desde la instantánea
+    aunque la fuente original cambie. Huecos -> 422 detenido salvo permitir_ficticio.
+    """
+    from services.ingestion import provider as P
+    from services.ingestion import scenarios as SC
+    g = _get(gid)
+    st: SimState = g["state"]
+    try:
+        esc = SC.presente_con_prevision(body.station, body.days)
+    except P.FuenteNoDisponible as e:
+        raise HTTPException(503, f"fuente no disponible: {e}")
+    serie = esc["serie"]
+    by_date = {p["date"]: p for p in serie["points"]}
+    migrada = False
+    days: list[WeatherDay] = []
+    for i in range(body.days):
+        d = (dt.date.fromisoformat(st.day) + dt.timedelta(days=i + 1)).isoformat()
+        p = by_date.get(d)
+        if p is None and st.day == "2026-01-01" and i == 0:
+            # La partida ficticia adopta el calendario real en el primer avance con
+            # clima real (migración explícita y registrada, no inventada).
+            serie_days = sorted(by_date)
+            if len(serie_days) < body.days:
+                raise HTTPException(422, "serie real más corta que los días pedidos")
+            migrada = True
+        if migrada:
+            d = sorted(by_date)[i]
+            p = by_date.get(d)
+        if p is None or p.get("precip_mm") is None or p.get("et0_mm") is None:
+            if not body.permitir_ficticio:
+                raise HTTPException(422, f"datos insuficientes el {d} (hueco etiquetado): simulación detenida. Use permitir_ficticio o escenario histórico.")
+            days.append(WeatherDay(date=d, precip_mm=2.0, et0_mm=3.5, kind="simulado",
+                                   station_id=serie["station_id"]))
+        else:
+            days.append(WeatherDay(date=d, precip_mm=p["precip_mm"], et0_mm=p["et0_mm"],
+                                   tmin_c=p.get("tmin_c") or 15.0, tmax_c=p.get("tmax_c") or 25.0,
+                                   kind=p.get("kind") or "pronostico", station_id=serie["station_id"]))
+    try:
+        out = step_week(st, _to_actions(body), days, PARAMS, rng_seed=g["seed"]) if body.days > 1 else \
+            step(st, _to_actions(body), days[0], PARAMS, rng_seed=g["seed"])
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    g["seed"] += body.days
+    snap = {"escenario": esc["escenario"], "station": esc["station"], "serie": serie,
+            "avisos": esc["avisos"], "politica": esc["politica_huecos"],
+            "dias_usados": [{"date": w.date, "precip_mm": w.precip_mm, "et0_mm": w.et0_mm,
+                             "kind": w.kind, "station": w.station_id} for w in days]}
+    for w in days:
+        SC.snapshot_save(gid, w.date, snap)
+    _record(gid, out["state"]["day"], out["events"] + [{"type": "clima_real", "proveedor": serie["provider"],
+              "estacion": serie["station_id"], "dias": [w.date for w in days], "avisos": esc["avisos"],
+              "calendario_migrado": migrada}])
+    _persist(gid, g)
+    out["weather_snapshot"] = {"dias": [w.date for w in days], "serie_kind": serie["kind"],
+                               "calendario_migrado": migrada}
+    return out
+
+
+@app.get("/games/{gid}/snapshot/{day}")
+def snapshot(gid: str, day: str):
+    _get(gid)
+    from services.ingestion import scenarios as SC
+    try:
+        return SC.snapshot_load(gid, day)
+    except FileNotFoundError:
+        raise HTTPException(404, "instantánea no encontrada")
 
 
 @app.get("/health")
