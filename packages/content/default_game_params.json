@@ -1,0 +1,20 @@
+{
+  "version": "game-0.1",
+  "evidence_level": "juego",
+  "nota": "Parámetros de JUEGO explícitos. No son prácticas reales ni están calibrados para variedad/edad/manejo/entorno. Profesional desactivado.",
+  "runoff_coef": 0.15,
+  "irrigation_efficiency": 0.85,
+  "kc_game": {"aguacate": 0.8, "mango": 0.75, "chirimoyo": 0.7},
+  "price_eur_kg_game": {"aguacate": 2.2, "mango": 1.6, "chirimoyo": 2.8},
+  "costs_eur_game": {"irrigation_eur_per_m3": 0.25, "labor_day_eur": 60.0},
+  "default_farm": {
+    "zone": "Costa Tropical de Granada (aprox.)",
+    "parcels": [
+      {"id": "P1", "crop": "aguacate", "area_ha": 1.0, "soil_water_mm": 45.0},
+      {"id": "P2", "crop": "mango", "area_ha": 0.8, "soil_water_mm": 40.0},
+      {"id": "P3", "crop": "chirimoyo", "area_ha": 0.6, "soil_water_mm": 38.0}
+    ],
+    "cash_eur": 5000.0,
+    "reservoir_m3": 200.0
+  }
+}

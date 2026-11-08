@@ -1,0 +1,4 @@
+date,precip_mm,et0_mm,kind,station_id
+2026-01-02,2.0,3.5,simulado,ficticia-costa-tropical
+2026-01-03,0.0,4.0,simulado,ficticia-costa-tropical
+2026-01-04,8.0,3.0,simulado,ficticia-costa-tropical
