@@ -147,3 +147,29 @@ def test_estaciones_default_motril():
     st = ST.get_station(None)
     assert st["aemet_municipio"] == "18140"
     assert len(ST.list_stations()) >= 1
+
+
+def test_siar_parser_manual():
+    from services.ingestion import siar as S
+    rows = [{"Fecha": "2026-11-01", "Estacion": "GR11", "TempMedia": 17.5, "TempMax": 22.1,
+             "TempMin": 12.3, "Precipitacion": 0.0, "EtPMon": 2.4},
+            {"Fecha": "2026-11-02", "Estacion": "GR11", "TempMedia": 16.9, "TempMax": 21.0,
+             "TempMin": 11.8, "Precipitacion": 4.2, "EtPMon": 1.9}]
+    res = S._parse_diarios(rows, "GR11")
+    assert len(res.points) == 2 and res.points[0].kind == "observacion"
+    assert res.points[1].precip_mm == 4.2 and res.points[1].et0_mm == 1.9
+    assert res.points[0].tz == "Europe/Madrid"
+
+
+def test_siar_500_es_fuente_no_disponible():
+    from services.ingestion import siar as S
+    import os
+    os.environ.setdefault("SIAR_TOKEN", "ficticio-1Ab")
+
+    def h(request):
+        return httpx.Response(500, json={"status": 500, "error": "Internal Server Error"})
+    try:
+        S.observation("GR11", "2026-11-01", "2026-11-02", client=mock_client(h))
+        raise AssertionError("debió fallar")
+    except P.FuenteNoDisponible:
+        pass
