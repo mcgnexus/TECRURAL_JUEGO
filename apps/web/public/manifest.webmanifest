@@ -4,8 +4,11 @@
   "description": "Juego orientativo, no recomendación real. Profesional desactivado.",
   "lang": "es",
   "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a6b3c",
-  "icons": []
+  "icons": [
+    { "src": "/icon-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" }
+  ]
 }
