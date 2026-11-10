@@ -1,0 +1,9 @@
+{
+  "nota": "Catálogo JUEGO de fertilizantes. Registro de aportes, sin recomendación real. Sin análisis no hay dosis válida.",
+  "origen": "eleccion-de-juego",
+  "evidence_level": "juego",
+  "productos": [
+    {"id": "NPK15_juego", "n_frac": 0.15, "eur_per_kg": 1.2},
+    {"id": "NK_juego", "n_frac": 0.1, "eur_per_kg": 1.0}
+  ]
+}

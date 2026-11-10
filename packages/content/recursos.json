@@ -1,0 +1,8 @@
+{
+  "nota": "Catálogo juego. Solo recursos con licencia verificada.",
+  "recursos": [
+    {"id": "terreno-isometrico", "tipo": "canvas-generado", "licencia": "propio-tecrural", "nota": "sin asset externo"},
+    {"id": "iconos-cultivo", "tipo": "svg-generado", "licencia": "propio-tecrural", "nota": "forma+color, no solo color"},
+    {"id": "fuente-sistema", "tipo": "sistema", "licencia": "sistema", "nota": "sin descarga, apto móvil"}
+  ]
+}

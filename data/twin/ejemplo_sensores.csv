@@ -1,0 +1,4 @@
+finca_id,sensor_id,magnitud,unidad,fecha,valor,permiso_ref
+FINCA-PILOTO,S-HUM-01,humedad_suelo,%,2026-09-01T08:00,32.5,permiso-simulado
+FINCA-PILOTO,S-HUM-01,humedad_suelo,%,2026-09-01T08:00,32.5,permiso-simulado
+FINCA-PILOTO,S-PLU-01,precipitacion,mm,2026-09-01T08:00,99999,permiso-simulado

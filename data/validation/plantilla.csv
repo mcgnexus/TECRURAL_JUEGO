@@ -1,0 +1,2 @@
+finca_id,parcela_id,campaña,fecha,especie,variedad,edad_anios,ano_tipo,suelo_textura,superficie_ha,riego_medido_m3,et0_mm,precip_mm,cosecha_medida_kg,cosecha_predicha_mid_kg,cosecha_predicha_low_kg,cosecha_predicha_high_kg,estres_obs,estres_pred,fecha_prediccion,responsable,permiso_ref
+,,,,,,,,,,,,,,,,,,,,,

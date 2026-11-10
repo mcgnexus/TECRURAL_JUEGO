@@ -1,0 +1,12 @@
+{
+  "nota": "Umbrales por escrito con expertos y usuarios. Sin valor = pendiente, bloquea aprobación. No inventar precisiones.",
+  "umbrales": {
+    "aguacate.costa-tropical.balance_hidrico.mae_mm": {"valor": null, "unidad": "mm", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "aguacate.costa-tropical.produccion_kg.rmse_kg": {"valor": null, "unidad": "kg", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "aguacate.costa-tropical.intervalo_cosecha.cobertura": {"valor": null, "unidad": "fracción", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "mango.costa-tropical.produccion_kg.rmse_kg": {"valor": null, "unidad": "kg", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "chirimoyo.costa-tropical.produccion_kg.rmse_kg": {"valor": null, "unidad": "kg", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "sanidad.estres_hidrico.sensibilidad": {"valor": null, "unidad": "fracción", "n_min": null, "aplicabilidad": "pendiente definir"},
+    "sanidad.estres_hidrico.especificidad": {"valor": null, "unidad": "fracción", "n_min": null, "aplicabilidad": "pendiente definir"}
+  }
+}

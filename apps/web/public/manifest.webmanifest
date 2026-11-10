@@ -1,0 +1,11 @@
+{
+  "name": "TecRural Juego",
+  "short_name": "TecRural",
+  "description": "Juego orientativo, no recomendación real. Profesional desactivado.",
+  "lang": "es",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1a6b3c",
+  "icons": []
+}

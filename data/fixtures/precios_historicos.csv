@@ -1,0 +1,8 @@
+fecha,cultivo,precio_eur_kg,canal,nivel_comercial,fuente
+2026-01-05,aguacate,2.10,cooperativa,origen ficticio,escenario juego
+2026-01-12,aguacate,2.20,base,origen ficticio,escenario juego
+2026-01-19,aguacate,2.35,mercado,destino ficticio,escenario juego
+2026-01-05,mango,1.50,cooperativa,origen ficticio,escenario juego
+2026-01-12,mango,1.60,base,origen ficticio,escenario juego
+2026-01-05,chirimoyo,2.70,cooperativa,origen ficticio,escenario juego
+2026-01-12,chirimoyo,2.80,base,origen ficticio,escenario juego

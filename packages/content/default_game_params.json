@@ -1,12 +1,38 @@
 {
-  "version": "game-0.1",
+  "version": "game-0.3",
   "evidence_level": "juego",
-  "nota": "Parámetros de JUEGO explícitos. No son prácticas reales ni están calibrados para variedad/edad/manejo/entorno. Profesional desactivado.",
+  "nota": "Parámetros de JUEGO explícitos. Orientativos, no recomendación real. Profesional desactivado.",
   "runoff_coef": 0.15,
   "irrigation_efficiency": 0.85,
   "kc_game": {"aguacate": 0.8, "mango": 0.75, "chirimoyo": 0.7},
   "price_eur_kg_game": {"aguacate": 2.2, "mango": 1.6, "chirimoyo": 2.8},
   "costs_eur_game": {"irrigation_eur_per_m3": 0.25, "labor_day_eur": 60.0},
+  "infra_game": {
+    "nota": "juego: capacidades y dotaciones ficticias configurables. No afirman derechos reales de agua.",
+    "supply_inflow_m3_day": 8.0,
+    "pump_capacity_m3_day": 60.0,
+    "supply_max_m3_day": 50.0,
+    "network_efficiency": 0.92,
+    "energy_kwh_per_m3": 0.4,
+    "energy_eur_per_kwh": 0.25,
+    "breakdown_prob_per_day": 0.02
+  },
+  "economy_game": {
+    "nota": "juego: precios escenarios por canal, no cotizaciones garantizadas. Deuda opcional con interés ficticio.",
+    "fixed_eur_per_ha_day": 0.0,
+    "channel_mod": {"base": 1.0, "cooperativa": 0.95, "mercado": 1.1},
+    "debt_daily_interest": 0.0002,
+    "max_kg_per_tree": 120.0,
+    "loss_frac": 0.05
+  },
+  "nutrition_game": {
+    "nota": "juego: registro de aportes, NO diagnóstico foliar. Sin análisis no hay dosis válida.",
+    "products": {
+      "NPK15_juego": {"n_frac": 0.15, "eur_per_kg": 1.2, "nota": "juego"},
+      "NK_juego": {"n_frac": 0.1, "eur_per_kg": 1.0, "nota": "juego"}
+    }
+  },
+  "mass_tolerance": {"mm": 1e-9, "m3": 1e-9, "almacenado": 0.02},
   "default_farm": {
     "zone": "Costa Tropical de Granada (aprox.)",
     "parcels": [
@@ -15,6 +41,7 @@
       {"id": "P3", "crop": "chirimoyo", "area_ha": 0.6, "soil_water_mm": 38.0}
     ],
     "cash_eur": 5000.0,
-    "reservoir_m3": 200.0
+    "reservoir_m3": 200.0,
+    "reservoir_max_m3": 500.0
   }
 }

@@ -1,0 +1,4 @@
+finca_id,parcela_id,campaña,fecha,especie,variedad,edad_anios,ano_tipo,suelo_textura,superficie_ha,riego_medido_m3,et0_mm,precip_mm,cosecha_medida_kg,cosecha_predicha_mid_kg,cosecha_predicha_low_kg,cosecha_predicha_high_kg,estres_obs,estres_pred,fecha_prediccion,responsable,permiso_ref
+FINCA-EJEMPLO,P1,2025-26,2026-09-10,aguacate,Hass,8,seco,franca,1.0,320,4.1,0.0,410,380,266,494,0,0,2026-09-01,tecnico-ejemplo,permiso-sintetico
+FINCA-EJEMPLO,P1,2025-26,2026-09-11,aguacate,Hass,8,seco,franca,1.0,300,3.9,2.0,395,375,262,487,0,0,2026-09-01,tecnico-ejemplo,permiso-sintetico
+FINCA-RESERVA,P1,2026-27,2027-09-10,aguacate,Hass,9,humedo,franca,1.0,310,4.0,1.0,420,390,273,507,1,0,2027-09-01,tecnico-ejemplo,permiso-sintetico
