@@ -419,6 +419,8 @@ def step(
                                "merma_kg": round(loss, 1),
                                "nota": "juego: lote a inventario, calidad/merma supuestas"})
             p.pending_fruit_kg = round(p.pending_fruit_kg + 100.0, 1)
+            ledger.append({"tipo": "rebrote", "parcela": p.id, "kg": 100.0,
+                           "nota": "juego: entrada explícita de fruta, no creación espontánea"})
         # Venta: None+harvest = auto-vender lo cosechado (compat. F1-3); número = vender hasta stock
         sell_qty = 0.0
         if a.harvest and a.sell_kg is None:

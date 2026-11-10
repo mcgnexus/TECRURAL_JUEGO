@@ -4,6 +4,6 @@
   "evidence_level": "juego",
   "productos": [
     {"id": "aceite_parafinico_juego", "registro_mapa": "CADUCADO-0000", "vigente": false, "usos": [], "nota": "caducado: bloquea recomendación"},
-    {"id": "bacillus_juego", "registro_mapa": "PENDIENTE", "vigente": false, "usos": ["aguacate"], "nota": "uso sin confirmar: bloquea recomendación"}
+    {"id": "bacillus_juego", "registro_mapa": "PENDIENTE", "vigente": false, "usos": [], "nota": "uso sin confirmar (ninguno autorizado): bloquea recomendación"}
   ]
 }

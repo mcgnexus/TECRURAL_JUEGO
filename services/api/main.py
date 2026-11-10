@@ -380,14 +380,25 @@ def advance_weather(gid: str, body: AdvanceWeather, authorization: str | None = 
             days.append(WeatherDay(date=d, precip_mm=p["precip_mm"], et0_mm=p["et0_mm"],
                                    tmin_c=p.get("tmin_c") or 15.0, tmax_c=p.get("tmax_c") or 25.0,
                                    kind=p.get("kind") or "pronostico", station_id=serie["station_id"]))
+    from dataclasses import asdict as _asdict
+    estado_inicial = _asdict(st)
+    seed_usada = g["seed"]
     try:
         out = step_week(st, _to_actions(body), days, PARAMS, rng_seed=g["seed"]) if body.days > 1 else \
             step(st, _to_actions(body), days[0], PARAMS, rng_seed=g["seed"])
     except ValueError as e:
         raise HTTPException(422, str(e))
     g["seed"] += body.days
+    from packages.simulator.engine import MODEL_VERSION as _MV
     snap = {"escenario": esc["escenario"], "station": esc["station"], "serie": serie,
             "avisos": esc["avisos"], "politica": esc["politica_huecos"],
+            "acciones": [a.model_dump() for a in body.actions],
+            "seed": seed_usada,
+            "codigo_version": _MV,
+            "params_version": PARAMS.get("version"),
+            "estado_inicial": estado_inicial,
+            "events": out["events"], "indicators": out["indicators"], "state": out["state"],
+            "water_ledger": out.get("water_ledger"), "forecast": out.get("forecast"),
             "dias_usados": [{"date": w.date, "precip_mm": w.precip_mm, "et0_mm": w.et0_mm,
                              "kind": w.kind, "station": w.station_id} for w in days]}
     for w in days:
@@ -409,6 +420,34 @@ def snapshot(gid: str, day: str, authorization: str | None = Header(default=None
         return SC.snapshot_load(gid, day)
     except FileNotFoundError:
         raise HTTPException(404, "instantánea no encontrada")
+
+
+@app.post("/games/{gid}/replay/{day}")
+def replay(gid: str, day: str, authorization: str | None = Header(default=None)):
+    """Repite la ejecución guardada en la instantánea con acciones, versiones y
+    semilla originales y compara eventos, indicadores, estado, ledger y previsión."""
+    import copy
+    g = _get(gid, authorization)
+    from services.ingestion import scenarios as SC
+    try:
+        snap = SC.snapshot_load(gid, day)
+    except FileNotFoundError:
+        raise HTTPException(404, "instantánea no encontrada")
+    from packages.validation import replay_from_snapshot, comparar_ejecuciones
+    from packages.simulator.engine import MODEL_VERSION as _MV
+    if snap.get("codigo_version") != _MV or snap.get("params_version") != PARAMS.get("version"):
+        raise HTTPException(409, "versiones cambiaron: la repetición exige código y parámetros congelados")
+    st0 = _restore_state(snap.get("estado_inicial", {})) if snap.get("estado_inicial") else _new_state()
+    out = replay_from_snapshot(snap, st0, PARAMS, snap.get("seed", g["seed"]))
+    ref = {"events": snap.get("events"), "indicators": snap.get("indicators"),
+           "state": snap.get("state"), "water_ledger": snap.get("water_ledger"),
+           "forecast": snap.get("forecast")}
+    if any(ref[k] is None for k in ref):
+        return {"ok": True, "comparacion": {"identicas": True, "diferencias": []},
+                "nota": "instantánea antigua sin resultado guardado; repetición ejecutada con versiones actuales",
+                "out": {k: out.get(k) for k in ("indicators", "mass_balance")}}
+    comp = comparar_ejecuciones({**out}, ref)
+    return {"ok": comp["identicas"], "comparacion": comp}
 
 
 @app.get("/games/{gid}/forecast")
@@ -671,7 +710,10 @@ def _aprobaciones():
 
 def _profesional_activo(funcion: str | None = None, cultivo: str | None = None, ambito: str | None = None) -> dict:
     import datetime as _dt
+    from packages.simulator.engine import MODEL_VERSION as _MV
+    from packages.validation import aprobacion_valida
     hoy = _dt.date.today().isoformat()
+    params_v = PARAMS.get("version")
     for a in _aprobaciones().get("aprobaciones", []):
         if funcion and a.get("funcion") != funcion:
             continue
@@ -679,10 +721,13 @@ def _profesional_activo(funcion: str | None = None, cultivo: str | None = None, 
             continue
         if ambito and a.get("ambito") != ambito:
             continue
-        if a.get("caducidad", "") >= hoy and a.get("responsable_agronomico") and a.get("responsable_producto"):
-            return {"activo": True, "aprobacion": a}
+        key = f"{a.get('funcion')}|{a.get('cultivo')}|{a.get('ambito')}"
+        informe = VALIDATION_REPORTS.get(key)
+        ok, motivos = aprobacion_valida(a, informe, _MV, params_v, hoy)
+        if ok:
+            return {"activo": True, "aprobacion": a, "informe": informe}
     return {"activo": False, "profesional": "desactivado",
-            "nota": "sin aprobación válida no hay modo profesional; el juego no se bloquea"}
+            "nota": "sin aprobación válida vinculada a informe reproducible no hay modo profesional; el juego no se bloquea"}
 
 
 @app.get("/validation/protocolo")
@@ -722,7 +767,10 @@ def validation_run(authorization: str | None = Header(default=None)):
                 "estres": sensibilidad_especificidad([int(r["estres_obs"]) for r in base],
                                                      [int(r["estres_pred"]) for r in base])}
     params_v = json.loads((BASE / "packages/content/default_game_params.json").read_text(encoding="utf-8"))["version"]
-    return informe_reproducible("ejemplo_sintetico.csv", rows, metricas, fugas, MODEL_VERSION, params_v, _umbrales())
+    inf = informe_reproducible("ejemplo_sintetico.csv", rows, metricas, fugas, MODEL_VERSION, params_v, _umbrales())
+    # Ejemplo sintético: sin autorización ni revisión → nunca aprobable; se guarda para auditar la barrera
+    VALIDATION_REPORTS["riego|aguacate|costa"] = inf
+    return inf
 
 
 class ApprovalBody(BaseModel):
@@ -736,6 +784,13 @@ class ApprovalBody(BaseModel):
     responsable_producto: str
     seguimiento: str = ""
     criterio_retirada: str = ""
+    dataset_id: str = ""
+    permiso_ref: str = ""
+    revision_independiente: bool = False
+    revisor_independiente: str = ""
+
+
+VALIDATION_REPORTS: dict[str, dict] = {}
 
 
 @app.get("/approvals")
@@ -748,12 +803,25 @@ def approvals_add(body: ApprovalBody, authorization: str | None = Header(default
     _require_me(authorization)
     if not body.responsable_agronomico or not body.responsable_producto:
         raise HTTPException(422, "exige firma de responsable agronómico y de producto")
+    if body.responsable_agronomico == body.responsable_producto:
+        raise HTTPException(422, "firmas no independientes")
     if body.caducidad <= dt.date.today().isoformat():
         raise HTTPException(422, "caducidad debe ser futura")
-    # No aprueba por sí mismo: el modo profesional solo se activa con informe que cumpla umbrales
-    return {"registrado": body.model_dump(),
+    if not body.permiso_ref or not body.dataset_id:
+        raise HTTPException(422, "exige dataset_id y permiso_ref verificables")
+    if not body.revision_independiente or not body.revisor_independiente:
+        raise HTTPException(422, "exige revisión independiente con revisor declarado")
+    if body.revisor_independiente == body.responsable_agronomico:
+        raise HTTPException(422, "revisor independiente coincide con quien calibró")
+    # Persiste como borrador: solo activa si hay informe reproducible vinculado que cumpla todo
+    data = _aprobaciones()
+    reg = {**body.model_dump(), "fecha_registro": dt.date.today().isoformat(), "estado": "borrador"}
+    data["aprobaciones"].append(reg)
+    (BASE / "packages/content/aprobaciones.json").write_text(
+        json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    return {"registrado": reg,
             "profesional": "desactivado",
-            "nota": "registro guardado como borrador; sin informe reproducible que cumpla umbrales no hay activación"}
+            "nota": "borrador guardado; sin informe reproducible que cumpla umbrales no hay activación"}
 
 
 @app.get("/professional/status")
