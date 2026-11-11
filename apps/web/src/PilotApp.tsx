@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import AxarquiaFarm from './AxarquiaFarm'
+import SoilCrossSection, { type SoilResult } from './SoilCrossSection'
 
 type Municipality = { name: string; admin1?: string; admin2?: string; latitude: number; longitude: number }
 type Point = { fecha: string; agua_estimada_mm: number }
-type Result = { escenarios: { habitual: Point[]; alternativa: Point[] }; meteorologia: { fuente: string; consultado_en: string; dias: { fecha: string; precip_mm: number; et0_mm: number }[] }; supuestos: string[]; aviso: string }
+type Result = SoilResult & { escenarios: { habitual: Point[]; alternativa: Point[] }; meteorologia: { fuente: string; consultado_en: string; dias: { fecha: string; precip_mm: number; et0_mm: number }[] }; supuestos: string[]; aviso: string }
 const API = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000'
 
 export default function PilotApp() {
@@ -120,6 +121,7 @@ export default function PilotApp() {
       {message && <p role="alert">{message}</p>}
       {busy && <p role="status">Consultando datos…</p>}
       {result && <section><h2>Cómo cambia el agua estimada</h2><p>{result.aviso}</p>
+        <SoilCrossSection result={result} />
         <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', textAlign: 'left' }}><thead><tr><th>Fecha</th><th>Riego habitual</th><th>Riego alternativo</th></tr></thead>
           <tbody>{result.escenarios.habitual.map((p, i) => <tr key={p.fecha}><th scope="row">{p.fecha}</th><td>{p.agua_estimada_mm} mm</td><td>{result.escenarios.alternativa[i]?.agua_estimada_mm} mm</td></tr>)}</tbody></table></div>
         <details><summary>¿Por qué veo esto?</summary><p>{result.meteorologia.fuente}; consulta: {result.meteorologia.consultado_en}. La previsión es modelizada, no observada.</p>
