@@ -4,6 +4,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 BASE = Path(__file__).resolve().parents[1]
 
+def test_prevision_se_muestra_en_una_tabla_sin_json():
+    app = (BASE / "apps/web/src/App.tsx").read_text(encoding="utf-8")
+    assert '<table' in app and 'Escenario bajo' in app and 'Escenario central' in app and 'Escenario alto' in app
+    assert 'JSON.stringify(info.forecast)' not in app
+    assert 'JSON.stringify(forecast.forecast)' not in app
+
 def test_flujos_esenciales_en_web():
     app = (BASE / "apps/web/src/App.tsx").read_text(encoding="utf-8")
     for s in ["Cuenta", "Guardar finca", "Avanzar", "Clima real", "Previsi", "Historial",

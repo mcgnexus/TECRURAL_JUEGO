@@ -41,6 +41,51 @@ app.add_middleware(
 )
 app.include_router(weather_router)
 
+
+@app.get('/pilot/municipios')
+def pilot_municipios(q: str):
+    from services.ingestion import pilot_weather
+    if len(q.strip()) < 2 or len(q) > 100:
+        raise HTTPException(422, 'Escriba al menos dos caracteres.')
+    try:
+        return {'municipios': pilot_weather.search_municipalities(q.strip())}
+    except Exception:
+        raise HTTPException(503, 'No se puede consultar el buscador de municipios.')
+
+
+class PilotComparison(BaseModel):
+    latitude: float = Field(ge=27, le=44)
+    longitude: float = Field(ge=-19, le=5)
+    crop: str
+    area_ha: float = Field(ge=0.1, le=10)
+    usual_mm: float = Field(ge=0, le=100)
+    alternative_mm: float = Field(ge=0, le=100)
+
+
+@app.post('/pilot/comparar')
+def pilot_comparar(body: PilotComparison):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from services.ingestion import openmeteo
+    from services.ingestion.pilot_weather import parse_forecast
+    from packages.simulator.water_comparison import compare_water
+    if body.crop not in ('aguacate', 'mango', 'chirimoyo'):
+        raise HTTPException(422, 'Cultivo no disponible en el juego.')
+    now = datetime.now(ZoneInfo('Europe/Madrid'))
+    try:
+        raw = openmeteo.raw_daily(body.latitude, body.longitude, 5)
+        days = parse_forecast(raw, now.date(), 5)
+    except Exception:
+        raise HTTPException(503, 'Previsión no disponible o incompleta; no se ha realizado la simulación.')
+    state = SimState(parcels=[ParcelState(id='P1', crop=body.crop, area_ha=body.area_ha)])
+    result = compare_water(state, 'P1', days, PARAMS, body.usual_mm, body.alternative_mm)
+    return {'escenarios': result, 'meteorologia': {'fuente': 'Open-Meteo, pronóstico modelizado',
+            'consultado_en': now.isoformat(), 'latitude': body.latitude, 'longitude': body.longitude,
+            'dias': [{'fecha': d.date, 'precip_mm': d.precip_mm, 'et0_mm': d.et0_mm} for d in days]},
+            'supuestos': ['Agua inicial: 40 mm; capacidad del suelo: 80 mm, valores de juego.',
+                          'El riego indicado se aplica cada día; infraestructura y eficiencia son supuestos de juego.'],
+            'aviso': 'Simulación orientativa no calibrada; no es una medición ni una recomendación profesional.'}
+
 # Fallback memoria para dev sin DB. Con DATABASE_URL se persiste en Neon.
 GAMES: dict[str, dict] = {}
 HIST: dict[str, list] = {}

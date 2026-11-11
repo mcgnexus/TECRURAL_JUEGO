@@ -65,6 +65,7 @@ export default function App() {
     try {
       const j = await api('/games', { method: 'POST', headers: H(), body: JSON.stringify({}) })
       setGameId(j.game_id)
+      setForecast(null)
       setMsg(j.ephemeral ? 'Partida efímera sin cuenta (temporal, puede perderse).' : 'Partida vinculada a tu cuenta de ensayo (sin garantía de persistencia).')
       await refresh(j.game_id)
     } catch { setMsg('Sin conexión: no se puede crear partida. No se inventan datos sin servidor.') }
@@ -110,6 +111,7 @@ export default function App() {
     } catch (e: any) { setMsg(`Clima no disponible: ${e.message || e}. Prueba con avance simulado.`) }
   }
   function afterAdvance(j: any, extra?: string) {
+    setForecast(null)
     setInfo({ cash_eur: j.indicators.cash_eur, reservoir_m3: j.indicators.reservoir_m3, day: j.state.day,
       debt_eur: j.indicators.debt_eur, energy_kwh: j.indicators.energy_kwh, inflow_m3: j.indicators.inflow_m3,
       inventory_kg: j.indicators.inventory_kg,
@@ -198,6 +200,8 @@ export default function App() {
     { id: 'P3', crop: 'chirimoyo', area_ha: 0.6, soil_water_mm: 38, health: 0.9, pending_kg: 500 },
   ]
   const cur = parcels.find(p => p.id === sel) || parcels[0]
+  const forecastRows: Record<string, { low_kg?: number; mid_kg?: number; high_kg?: number }> | null = forecast?.forecast || info?.forecast || null
+  const formatKg = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) ? `${value.toLocaleString('es-ES', { maximumFractionDigits: 2 })} kg` : '—'
   const setA = (id: string, patch: Partial<Acts[string]>) => setActs(a => ({ ...a, [id]: { ...a[id], ...patch } }))
 
   return (
@@ -295,8 +299,19 @@ export default function App() {
         <button onClick={saveVersion} disabled={!gameId || !online} style={{ flex: 1, minHeight: 48 }}>Guardar versión</button>
       </div>
       {info && <h2 style={{ fontSize: 18 }}>Caja: {info.cash_eur} € · Agua: {info.reservoir_m3} m³ · Deuda: {info.debt_eur ?? 0} € · Día: {info.day}</h2>}
-      {info?.forecast && <p style={{ fontSize: 14 }}>Previsión: {JSON.stringify(info.forecast)} (orientativa)</p>}
-      {forecast && <p style={{ fontSize: 14 }}>Previsión juego: {JSON.stringify(forecast.forecast)} · {forecast.nota}</p>}
+      {forecastRows && <section aria-label="Previsión de juego">
+        <h2 style={{ fontSize: 18 }}>Previsión de juego</h2>
+        <p style={{ fontSize: 14 }}>Estimación orientativa, sin calibrar; no es una recomendación profesional.</p>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', textAlign: 'left', fontSize: 14 }}>
+            <thead><tr><th scope="col">Parcela y cultivo</th><th scope="col">Escenario bajo</th><th scope="col">Escenario central</th><th scope="col">Escenario alto</th></tr></thead>
+            <tbody>{Object.entries(forecastRows).map(([id, row]) => <tr key={id}>
+              <th scope="row">{id} · {parcels.find(p => p.id === id)?.crop || 'cultivo no disponible'}</th>
+              <td>{formatKg(row?.low_kg)}</td><td>{formatKg(row?.mid_kg)}</td><td>{formatKg(row?.high_kg)}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </section>}
       {versions.length > 0 && <p style={{ fontSize: 14 }}>Versiones: {versions.map((v: any) => `v${v.v} ${v.day}`).join(', ')} (ensayo)</p>}
       <section aria-label="Historial">
         <h2 style={{ fontSize: 18 }}>Historial (efectos y costes)</h2>
