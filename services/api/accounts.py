@@ -65,7 +65,7 @@ def _locked(email: str) -> bool:
             f = D.failed_get(email) or {"attempts": 0, "locked_until": 0.0}
             return bool(_now() < f.get("locked_until", 0.0))
         except Exception:
-            pass
+            raise
     f = FAILED.get(email)
     return bool(f and _now() < f.get("locked_until", 0))
 
@@ -90,7 +90,7 @@ def register(email: str, password: str) -> dict:
         except ValueError:
             raise
         except Exception:
-            pass  # sin DB útil cae a memoria
+            raise  # con base configurada nunca confirmar un alta solo en memoria
     if em in BY_EMAIL:
         raise ValueError("esa cuenta ya existe; inicie sesión o recupere la contraseña")
     import uuid
@@ -132,7 +132,7 @@ def login(email: str, password: str) -> dict:
         except (ValueError, PermissionError):
             raise
         except Exception:
-            pass
+            raise
     aid = BY_EMAIL.get(em)
     ok = False
     if aid and (a := ACCOUNTS.get(aid)):
@@ -167,7 +167,7 @@ def request_reset(email: str, simulated: bool = True) -> dict:
                     out["reset_debug"] = tok  # SOLO desarrollo/tests; jamás en producción real
             return out
         except Exception:
-            pass
+            raise
     if em in BY_EMAIL:
         tok = secrets.token_urlsafe(24)
         RESETS[em] = {"token": tok, "expires": _now() + RESET_TTL_S}
@@ -200,7 +200,7 @@ def reset_password(email: str, token: str, password: str) -> dict:
         except (ValueError, KeyError):
             raise
         except Exception:
-            pass
+            raise
     r = RESETS.get(em)
     if not r or _now() > r.get("expires", 0):
         raise ValueError("enlace caducado o inexistente, pida uno nuevo (recuperación)")
@@ -226,7 +226,7 @@ def logout(token: str | None) -> dict:
             try:
                 D.session_delete(token)
             except Exception:
-                pass
+                raise
         SESSIONS.pop(token, None)
     return {"ok": True}
 
@@ -240,7 +240,7 @@ def account_from_token(token: str | None) -> dict | None:
             if a:
                 return a
         except Exception:
-            pass
+            raise
     s = SESSIONS.get(token)
     if not s or _now() > s["expires"]:
         SESSIONS.pop(token, None)
@@ -256,7 +256,7 @@ def set_consent(account_id: str, marketing: bool) -> dict:
                         "prueba": {"marketing": bool(marketing)},
                         "nota": "consentimiento comercial separado, opcional y revocable"}
         except Exception:
-            pass
+            raise
     a = ACCOUNTS.get(account_id)
     if not a:
         raise KeyError("cuenta no encontrada")
@@ -273,7 +273,7 @@ def _account_email(account_id: str) -> str | None:
             if (a := D.account_by_id(account_id)):
                 return a["email"]
         except Exception:
-            pass
+            raise
     if (a := ACCOUNTS.get(account_id)):
         return a["email"]
     return None
@@ -287,7 +287,7 @@ def send_commercial(account_id: str, body: str) -> bool:
             if (a := D.account_by_id(account_id)):
                 consent = a.get("marketing_consent")
         except Exception:
-            pass
+            raise
     if consent is None:
         a = ACCOUNTS.get(account_id)
         if not a or not a.get("marketing_consent"):
@@ -310,7 +310,7 @@ def export_account(account_id: str) -> dict:
                 return {"cuenta": safe, "contactos": contacts,
                         "nota": "exportación RGPD: datos de la cuenta y solicitudes de contacto (sin credenciales)"}
         except Exception:
-            pass
+            raise
     a = ACCOUNTS.get(account_id)
     if not a:
         raise KeyError("cuenta no encontrada")
@@ -326,7 +326,7 @@ def delete_account(account_id: str) -> dict:
             D.sessions_delete_account(account_id)
             D.account_delete(account_id)
         except Exception:
-            pass
+            raise
     for tok, s in list(SESSIONS.items()):
         if s["account_id"] == account_id:
             SESSIONS.pop(tok, None)
@@ -344,7 +344,7 @@ def add_contact(account_id: str, medio: str, valor: str, finalidad: str, mensaje
             if D.contact_add(account_id, medio, valor, finalidad, mensaje):
                 return
         except Exception:
-            pass
+            raise
     CONTACTS.setdefault(account_id, []).append(
         {"medio": medio, "valor": valor, "finalidad": finalidad, "mensaje": mensaje, "at": _now()})
 
@@ -355,7 +355,7 @@ def save_version(game_id: str, state: dict) -> dict:
             if (out := D.version_save(game_id, state.get("day"), state)):
                 return out
         except Exception:
-            pass
+            raise
     vs = VERSIONS.setdefault(game_id, [])
     v = {"v": len(vs) + 1, "day": state.get("day"), "state": state, "at": _now()}
     vs.append(v)
@@ -368,7 +368,7 @@ def list_versions(game_id: str) -> list:
             if (out := D.versions_list(game_id)) is not None:
                 return out
         except Exception:
-            pass
+            raise
     return [{"v": x["v"], "day": x["day"], "at": x["at"]} for x in VERSIONS.get(game_id, [])]
 
 
@@ -378,7 +378,7 @@ def get_version(game_id: str, v: int) -> dict | None:
             if (out := D.version_get(game_id, v)) is not None:
                 return out
         except Exception:
-            pass
+            raise
     for x in VERSIONS.get(game_id, []):
         if x["v"] == v:
             return x

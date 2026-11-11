@@ -12,3 +12,6 @@ data/cache/
 data/snapshots/
 .DS_Store
 opencode-*.json
+
+.vercel
+.env*

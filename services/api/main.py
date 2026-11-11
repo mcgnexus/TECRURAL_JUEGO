@@ -128,12 +128,12 @@ def _restore_state(data: dict) -> SimState:
 
 
 def _get(gid: str, authorization: str | None = None) -> dict:
-    g = GAMES.get(gid)
-    if g is None and _DB_OK:
+    g = None if _DB_OK else GAMES.get(gid)
+    if _DB_OK:
         try:
             row = load_game(gid)
         except Exception:
-            row = None
+            raise HTTPException(503, "base de datos no disponible; no se puede leer la partida")
         if row:
             data = row["state_json"] if isinstance(row["state_json"], dict) else json.loads(row["state_json"])
             g = {"state": _restore_state(data), "account": row["account_id"],
@@ -169,12 +169,14 @@ def _require_me(authorization: str | None = None) -> dict:
 
 
 def _persist(gid: str, g: dict) -> None:
-    GAMES[gid] = g
+    if database_configured() and not _DB_OK:
+        raise HTTPException(503, "base de datos no disponible; partida no guardada")
     if _DB_OK:
         try:
             save_game(gid, g.get("account"), g["ephemeral"], g["seed"], g["state"])
         except Exception:
-            pass
+            raise HTTPException(503, "base de datos no disponible; partida no guardada")
+    GAMES[gid] = g
 
 
 def _record(gid: str, day: str, events: list, water_ledger: list | None = None) -> None:
@@ -268,7 +270,7 @@ def edit_farm(gid: str, body: FarmEdit, authorization: str | None = Header(defau
     if body.cash_eur is not None:
         st.cash_eur = body.cash_eur
     _persist(gid, g)
-    return get_game(gid)
+    return get_game(gid, authorization)
 
 
 @app.post("/games/{gid}/restart")
@@ -284,7 +286,7 @@ def restart(gid: str, authorization: str | None = Header(default=None)):
             clear_history(gid)
         except Exception:
             pass
-    return get_game(gid)
+    return get_game(gid, authorization)
 
 
 def _next_days(start_day: str, n: int, body: AdvanceDay) -> list[WeatherDay]:
@@ -603,6 +605,8 @@ def accounts_login(body: LoginBody):
 
 @app.post("/accounts/recover")
 def accounts_recover(body: RecoverBody):
+    if _os.getenv("TECRURAL_PROD") == "1":
+        raise HTTPException(503, "recuperación por correo no disponible")
     try:
         return AC.request_reset(body.email, simulated=True)
     except ValueError as e:
