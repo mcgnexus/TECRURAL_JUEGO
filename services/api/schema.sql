@@ -1,5 +1,6 @@
--- Esquema TecRural como código (v3 Fase 6). Ejecutar con conexión directa para migraciones
--- serias; este DDL inicial es seguro en pooled con autocommit.
+-- Esquema TecRural como código (v3 Fase 6 + persistencia cuentas/sesiones).
+-- Seguro en pooled con autocommit (solo CREATE TABLE/INDEX IF NOT EXISTS).
+-- Orden: primero tablas sin FK, después las que referencian.
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -9,22 +10,6 @@ CREATE TABLE IF NOT EXISTS accounts (
   marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
   consent_log JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  token TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  expires_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS game_versions (
-  id BIGSERIAL PRIMARY KEY,
-  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  v INTEGER NOT NULL,
-  day TEXT NOT NULL,
-  state_json JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(game_id, v)
 );
 
 CREATE TABLE IF NOT EXISTS games (
@@ -48,3 +33,57 @@ CREATE TABLE IF NOT EXISTS game_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_events_game ON game_events(game_id, id);
+
+-- Sesiones opacas (persistentes; expiración por servidor, no por cliente).
+CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_account ON sessions(account_id);
+
+-- Recuperación de contraseña: token de un solo uso con caducidad.
+CREATE TABLE IF NOT EXISTS password_resets (
+  email TEXT PRIMARY KEY,
+  token TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+-- Límite de intentos de acceso (protección abuso) por cuenta.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  email TEXT PRIMARY KEY,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  locked_until TIMESTAMPTZ NULL
+);
+
+-- Solicitudes de contacto con finalidad declarada.
+CREATE TABLE IF NOT EXISTS contacts (
+  id BIGSERIAL PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  medio TEXT NOT NULL,
+  valor TEXT NOT NULL,
+  finalidad TEXT NOT NULL,
+  mensaje TEXT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(account_id);
+
+-- Versionado de partidas (persistente; el juego usa 409 ante restauración anterior).
+CREATE TABLE IF NOT EXISTS game_versions (
+  id BIGSERIAL PRIMARY KEY,
+  game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  v INTEGER NOT NULL,
+  day TEXT NOT NULL,
+  state_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(game_id, v)
+);
+
+-- Instantáneas de clima real por partida y día (replay reproducible en serverless).
+CREATE TABLE IF NOT EXISTS snapshots (
+  game_id TEXT NOT NULL,
+  day TEXT NOT NULL,
+  payload_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (game_id, day)
+);

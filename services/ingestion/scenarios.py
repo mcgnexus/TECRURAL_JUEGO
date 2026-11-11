@@ -70,6 +70,16 @@ def historico_cerrado(rows: list[dict], station_id: str | None = None, nombre: s
 
 
 def snapshot_save(game_id: str, day: str, payload: dict) -> str:
+    try:
+        from services.api import db as D
+    except ImportError:
+        D = None  # type: ignore
+    if D is not None and D.database_configured():
+        try:
+            if D.snapshot_save(game_id, day, payload):
+                return f"db:{game_id}/{day}"
+        except Exception:
+            pass
     d = SNAP_DIR / game_id
     d.mkdir(parents=True, exist_ok=True)
     f = d / f"{day}.json"
@@ -78,5 +88,15 @@ def snapshot_save(game_id: str, day: str, payload: dict) -> str:
 
 
 def snapshot_load(game_id: str, day: str) -> dict:
+    try:
+        from services.api import db as D
+    except ImportError:
+        D = None  # type: ignore
+    if D is not None and D.database_configured():
+        try:
+            if (p := D.snapshot_load(game_id, day)) is not None:
+                return p
+        except Exception:
+            pass
     f = SNAP_DIR / game_id / f"{day}.json"
     return json.loads(f.read_text(encoding="utf-8"))

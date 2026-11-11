@@ -5,7 +5,9 @@ import json
 import uuid
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+import os as _os
 
 from packages.simulator.engine import SimState, ParcelState, ParcelAction, WeatherDay, step, step_week
 
@@ -29,6 +31,14 @@ except ImportError:
     from weather import router as weather_router  # type: ignore
 
 app = FastAPI(title="TecRural API", version="1.0.0")
+
+_cors_origins = [o.strip() for o in _os.getenv("FRONTEND_URL", "").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins if _cors_origins else [],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 app.include_router(weather_router)
 
 # Fallback memoria para dev sin DB. Con DATABASE_URL se persiste en Neon.
@@ -644,7 +654,7 @@ def accounts_consent(body: ConsentBody, authorization: str | None = Header(defau
 def contact(body: ContactBody, authorization: str | None = Header(default=None)):
     me = _me(authorization)
     aid = me["id"] if me else "anonimo"
-    AC.CONTACTS.setdefault(aid, []).append({**body.model_dump(), "at": __import__("time").time()})
+    AC.add_contact(aid, body.medio, body.valor, body.finalidad, body.mensaje)
     return {"ok": True, "nota": f"solicitud registrada con finalidad: {body.finalidad}. Sin consentimiento comercial no hay comunicaciones."}
 
 
@@ -843,8 +853,11 @@ def approvals_add(body: ApprovalBody, authorization: str | None = Header(default
     data = _aprobaciones()
     reg = {**body.model_dump(), "fecha_registro": dt.date.today().isoformat(), "estado": "borrador"}
     data["aprobaciones"].append(reg)
-    (BASE / "packages/content/aprobaciones.json").write_text(
-        json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    try:
+        (BASE / "packages/content/aprobaciones.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    except OSError:
+        raise HTTPException(503, "almacenamiento de solo lectura en este entorno; borrador no persistido")
     return {"registrado": reg,
             "profesional": "desactivado",
             "nota": "borrador guardado; sin informe reproducible que cumpla umbrales no hay activación"}
