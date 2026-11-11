@@ -60,6 +60,28 @@ class PilotComparison(BaseModel):
     area_ha: float = Field(ge=0.1, le=10)
     usual_mm: float = Field(ge=0, le=100)
     alternative_mm: float = Field(ge=0, le=100)
+    soil_texture: str = 'desconocido'
+    soil_capacity_mm: float | None = Field(default=None, ge=1, le=500, allow_inf_nan=False)
+    soil_initial_mm: float | None = Field(default=None, ge=0, le=500, allow_inf_nan=False)
+
+
+class IrrigationConversion(BaseModel):
+    area_ha: float = Field(gt=0, le=10)
+    volume_m3: float | None = Field(default=None, ge=0)
+    flow_m3_hour: float | None = Field(default=None, ge=0)
+    duration_hours: float | None = Field(default=None, ge=0)
+
+
+@app.post('/pilot/convertir-riego')
+def pilot_convertir_riego(body: IrrigationConversion):
+    from services.api.irrigation_inputs import irrigation_mm_per_event
+    try:
+        mm = irrigation_mm_per_event(**body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    if mm > 100:
+        raise HTTPException(422, 'La lámina supera el límite de 100 mm por día del simulador.')
+    return {'mm_por_riego': mm, 'nota': 'Conversión geométrica, no una recomendación de riego.'}
 
 
 @app.post('/pilot/comparar')
@@ -69,20 +91,27 @@ def pilot_comparar(body: PilotComparison):
     from services.ingestion import openmeteo
     from services.ingestion.pilot_weather import parse_forecast
     from packages.simulator.water_comparison import compare_water
+    from services.api.pilot_soil import resolve_soil
     if body.crop not in ('aguacate', 'mango', 'chirimoyo'):
         raise HTTPException(422, 'Cultivo no disponible en el juego.')
+    try:
+        soil = resolve_soil(body.soil_texture, body.soil_capacity_mm, body.soil_initial_mm)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     now = datetime.now(ZoneInfo('Europe/Madrid'))
     try:
         raw = openmeteo.raw_daily(body.latitude, body.longitude, 5)
         days = parse_forecast(raw, now.date(), 5)
     except Exception:
         raise HTTPException(503, 'Previsión no disponible o incompleta; no se ha realizado la simulación.')
-    state = SimState(parcels=[ParcelState(id='P1', crop=body.crop, area_ha=body.area_ha)])
+    state = SimState(parcels=[ParcelState(id='P1', crop=body.crop, area_ha=body.area_ha,
+                                        max_storage_mm=soil['capacity_mm'], soil_water_mm=soil['initial_mm'])])
     result = compare_water(state, 'P1', days, PARAMS, body.usual_mm, body.alternative_mm)
     return {'escenarios': result, 'meteorologia': {'fuente': 'Open-Meteo, pronóstico modelizado',
             'consultado_en': now.isoformat(), 'latitude': body.latitude, 'longitude': body.longitude,
             'dias': [{'fecha': d.date, 'precip_mm': d.precip_mm, 'et0_mm': d.et0_mm} for d in days]},
-            'supuestos': ['Agua inicial: 40 mm; capacidad del suelo: 80 mm, valores de juego.',
+            'suelo': soil,
+            'supuestos': [f"Capacidad: {soil['capacity_mm']} mm ({soil['capacity_source']}); agua inicial: {soil['initial_mm']} mm ({soil['initial_source']}).",
                           'El riego indicado se aplica cada día; infraestructura y eficiencia son supuestos de juego.'],
             'aviso': 'Simulación orientativa no calibrada; no es una medición ni una recomendación profesional.'}
 

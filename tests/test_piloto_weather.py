@@ -61,3 +61,27 @@ def test_pilot_comparison_uses_forecast_and_equal_inputs(monkeypatch):
     result = response.json()
     assert len(result['meteorologia']['dias']) == 5
     assert result['escenarios']['habitual'] == result['escenarios']['alternativa']
+
+
+def test_pilot_applies_local_soil_inputs_and_reports_source(monkeypatch):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from fastapi.testclient import TestClient
+    from services.api.main import app
+    from services.ingestion import openmeteo
+    today = datetime.now(ZoneInfo('Europe/Madrid')).date()
+    monkeypatch.setattr(openmeteo, 'raw_daily', lambda *args, **kwargs: {'daily': {
+        'time': [(today + timedelta(days=i)).isoformat() for i in range(5)],
+        'precipitation_sum': [0] * 5, 'et0_fao_evapotranspiration': [3] * 5}})
+    body = {'latitude': 36.75, 'longitude': -3.52, 'crop': 'aguacate', 'area_ha': 1,
+            'usual_mm': 4, 'alternative_mm': 2, 'soil_texture': 'arenoso',
+            'soil_capacity_mm': 120, 'soil_initial_mm': 30}
+    result = TestClient(app).post('/pilot/comparar', json=body)
+    assert result.status_code == 200
+    assert result.json()['suelo']['capacity_mm'] == 120
+    assert 'usuario' in result.json()['suelo']['capacity_source']
+    body['soil_capacity_mm'] = 30
+    body['soil_initial_mm'] = 15
+    other = TestClient(app).post('/pilot/comparar', json=body)
+    assert other.status_code == 200
+    assert other.json()['escenarios']['habitual'] != result.json()['escenarios']['habitual']
