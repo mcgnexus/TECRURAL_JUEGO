@@ -2,9 +2,10 @@
 -- serias; este DDL inicial es seguro en pooled con autocommit.
 CREATE TABLE IF NOT EXISTS accounts (
   id TEXT PRIMARY KEY,
-  phone TEXT UNIQUE NOT NULL,
-  email TEXT NULL,
-  verified BOOLEAN NOT NULL DEFAULT FALSE,
+  email TEXT UNIQUE NOT NULL,
+  password_salt TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  verified BOOLEAN NOT NULL DEFAULT TRUE,
   marketing_consent BOOLEAN NOT NULL DEFAULT FALSE,
   consent_log JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()

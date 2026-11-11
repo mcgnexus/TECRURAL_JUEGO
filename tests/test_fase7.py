@@ -42,8 +42,8 @@ def test_api_profesional_desactivado_y_prospectivo():
     c = TestClient(app)
     assert c.get("/professional/status").json()["activo"] is False
     assert "pendientes" in c.get("/validation/protocolo").json()["nota"]
-    tok = c.post("/accounts/request_code", json={"phone": "+34600999001"}).json()["code_debug"]
-    tok = c.post("/accounts/verify", json={"phone": "+34600999001", "code": tok}).json()["token"]
+    c.post("/accounts/register", json={"email": "fase7-2@ejemplo.es", "password": "Secreta01"})
+    tok = c.post("/accounts/login", json={"email": "fase7-2@ejemplo.es", "password": "Secreta01"}).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     inf = c.post("/validation/run", headers=h).json()
     assert inf["profesional"] == "desactivado" and inf["aprobable"] is False

@@ -8,7 +8,7 @@ def test_flujos_esenciales_en_web():
     app = (BASE / "apps/web/src/App.tsx").read_text(encoding="utf-8")
     for s in ["Cuenta", "Guardar finca", "Avanzar", "Clima real", "Previsi", "Historial",
               "inventario", "phenology", "Vender", "agua:", "versión", "Sistema",
-              "SMS simulado", "sin garantía", "Profesional desactivado",
+              "correo y contraseña", "sin garantía", "Profesional desactivado",
               "no finge datos", "no medida", "escenario"]:
         assert s in app, f"falta flujo {s}"
 

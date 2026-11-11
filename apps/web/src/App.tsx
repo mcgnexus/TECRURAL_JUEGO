@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import IsoMap from './IsoMap'
+import IsoMap from './AxarquiaFarm'
 
 type Parcel = { id: string; crop: string; area_ha: number; soil_water_mm: number; health: number; pending_kg: number; inventory_kg?: number; phenology?: string; cum_n_kg?: number }
 
@@ -38,7 +38,8 @@ export default function App() {
   const [hist, setHist] = useState<any[]>([])
   const [online, setOnline] = useState(navigator.onLine)
   const [tut, setTut] = useState(() => !localStorage.getItem('tecrural-tut'))
-  const [phone, setPhone] = useState('+34600000000')
+  const [email, setEmail] = useState('agricultor@ejemplo.es')
+  const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [me, setMe] = useState<any>(null)
   const [forecast, setForecast] = useState<any>(null)
@@ -138,19 +139,38 @@ export default function App() {
     try { const j = await api(`/games/${gameId}/forecast`, { headers: authHeaders() }); setForecast(j); setMsg('Previsión de juego por intervalos (orientativa, sin calibrar).') }
     catch (e: any) { setMsg(`Sin previsión: ${e.message || e}`) }
   }
-  async function requestCode() {
+  async function register() {
     try {
-      const j = await api('/accounts/request_code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }) })
-      setMsg(j.code_debug ? `Código de ensayo (solo desarrollo): ${j.code_debug}. Caduca en 10 min.` : 'Código enviado (simulado).')
-    } catch (e: any) { setMsg(`No se pudo pedir código: ${e.message || e}`) }
+      await api('/accounts/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      setMsg('Cuenta creada. Entrando…')
+      await doLogin()
+    } catch (e: any) { setMsg(`No se pudo crear: ${e.message || e}`) }
   }
-  async function verifyCode() {
+  async function doLogin() {
     try {
-      const j = await api('/accounts/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone, code }) })
+      const j = await api('/accounts/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
       try { localStorage.setItem(TOK_KEY, j.token) } catch {}
-      setMsg('Cuenta verificada (ensayo, SMS simulado). Sesión 24 h.')
+      setMsg('Sesión iniciada (24 h). Tus partidas se vinculan a tu cuenta.')
       await loadMe()
-    } catch (e: any) { setMsg(`Código incorrecto o caducado: ${e.message || e}`) }
+    } catch (e: any) { setMsg(`No se pudo entrar: ${e.message || e}`) }
+  }
+  async function logout() {
+    try { await api('/accounts/logout', { method: 'POST', headers: authHeaders() }) } catch {}
+    try { localStorage.removeItem(TOK_KEY) } catch {}
+    setMe(null); setMsg('Sesión cerrada en este dispositivo.')
+  }
+  async function recover() {
+    try {
+      const j = await api('/accounts/recover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      if (j.reset_debug) setCode(j.reset_debug)
+      setMsg(j.reset_debug ? 'Enlace de ensayo (solo desarrollo). Pulsa “Fijar nueva” para usarlo.' : 'Si la cuenta existe, se envió un enlace (válido 30 min).')
+    } catch (e: any) { setMsg(`No se pudo recuperar: ${e.message || e}`) }
+  }
+  async function doReset() {
+    try {
+      await api('/accounts/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, token: code, password }) })
+      setMsg('Contraseña actualizada. Entra de nuevo.')
+    } catch (e: any) { setMsg(`No se pudo fijar: ${e.message || e}`) }
   }
   async function loadMe() {
     try { setMe(await api('/accounts/me', { headers: authHeaders() })) }
@@ -185,7 +205,7 @@ export default function App() {
       <a href="#panel" style={{ position: 'absolute', left: -9999 }} onFocus={e => (e.target as HTMLElement).style.left = '8px'} onBlur={e => (e.target as HTMLElement).style.left = '-9999px'}>Saltar al panel de parcela</a>
       <h1 style={{ fontSize: 22 }}>TecRural · juego</h1>
       {!online && <p role="alert" style={{ background: '#f8d7da', padding: 8 }}>Sin conexión: no se puede avanzar ni guardar. El juego no finge datos sin servidor.</p>}
-      <p style={{ background: '#fff3cd', padding: 8, fontSize: 14 }}>Juego/experimental. Humedad <b>estimada, no medida</b>. Precios y costes de <b>juego</b>. Profesional desactivado. Entorno de ensayo: registro SMS simulado y guardado sin garantía. <span style={{ color: '#555' }}>Fuentes: motor {info?.prov?.model_version || 'sim-0.3.0'} · {info?.prov?.parameter_set || 'game-0.3'} · clima: {info?.prov?.weather_kind || 'simulado'}.</span></p>
+      <p style={{ background: '#fff3cd', padding: 8, fontSize: 14 }}>Juego/experimental. Humedad <b>estimada, no medida</b>. Precios y costes de <b>juego</b>. Profesional desactivado. Entorno de ensayo: cuenta con correo y contraseña, guardado sin garantía. <span style={{ color: '#555' }}>Fuentes: motor {info?.prov?.model_version || 'sim-0.3.0'} · {info?.prov?.parameter_set || 'game-0.3'} · clima: {info?.prov?.weather_kind || 'simulado'}.</span></p>
       {tut && (
         <section aria-label="Tutorial" style={{ border: '2px dashed #1a6b3c', borderRadius: 12, padding: 12 }}>
           <b>Tutorial (30 s):</b>
@@ -198,28 +218,35 @@ export default function App() {
         </section>
       )}
       <section aria-label="Cuenta de ensayo" style={{ border: '1px solid #999', borderRadius: 12, padding: 12, marginTop: 8 }}>
-        <b>Cuenta (ensayo, SMS simulado)</b>
+        <b>Cuenta (ensayo, correo y contraseña)</b>
+        <p style={{ fontSize: 13 }}>Guarda tus partidas en este dispositivo y servidor. Sin garantías de persistencia.</p>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-          <label>Teléfono E.164:
-            <input value={phone} onChange={e => setPhone(e.target.value)} inputMode="tel" aria-label="Teléfono E.164" style={{ fontSize: 16, minHeight: 44, width: 170, marginLeft: 6 }} />
+          <label>Correo:
+            <input value={email} onChange={e => setEmail(e.target.value)} inputMode="email" aria-label="Correo electrónico" style={{ fontSize: 16, minHeight: 44, width: 200, marginLeft: 6 }} />
           </label>
-          <label>Código:
-            <input value={code} onChange={e => setCode(e.target.value)} inputMode="numeric" aria-label="Código de verificación" style={{ fontSize: 16, minHeight: 44, width: 110, marginLeft: 6 }} />
+          <label>Contraseña:
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} aria-label="Contraseña" style={{ fontSize: 16, minHeight: 44, width: 160, marginLeft: 6 }} />
+          </label>
+          <label>Código o enlace:
+            <input value={code} onChange={e => setCode(e.target.value)} inputMode="text" aria-label="Código o enlace de recuperación" style={{ fontSize: 16, minHeight: 44, width: 140, marginLeft: 6 }} />
           </label>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-          <button onClick={requestCode} style={{ flex: 1, minHeight: 48 }}>Pedir código</button>
-          <button onClick={verifyCode} style={{ flex: 1, minHeight: 48 }}>Verificar</button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <button onClick={register} style={{ flex: 1, minHeight: 48 }}>Crear cuenta</button>
+          <button onClick={doLogin} style={{ flex: 1, minHeight: 48 }}>Entrar</button>
+          <button onClick={logout} style={{ flex: 1, minHeight: 48 }}>Salir</button>
           <button onClick={loadMe} style={{ flex: 1, minHeight: 48 }}>Mi cuenta</button>
+          <button onClick={recover} style={{ flex: 1, minHeight: 48 }}>Recuperar</button>
+          <button onClick={doReset} style={{ flex: 1, minHeight: 48 }}>Fijar nueva</button>
         </div>
-        {me && <p style={{ fontSize: 14 }}>Cuenta {me.id} · {me.phone} · verificada: {String(me.verified)} · publicidad: {String(me.marketing_consent)}</p>}
+        {me && <p style={{ fontSize: 14 }}>Cuenta {me.id} · {me.email} · publicidad: {String(me.marketing_consent)}</p>}
       </section>
       <label style={{ fontSize: 15 }}>Parcela (teclado y lector de pantalla):
         <select value={sel} onChange={e => setSel(e.target.value)} aria-label="Elegir parcela" style={{ fontSize: 16, minHeight: 48, marginLeft: 8 }}>
           {parcels.map(p => <option key={p.id} value={p.id}>{p.id} · {p.crop}</option>)}
         </select>
       </label>
-      <IsoMap parcels={parcels.map(p => ({ ...p, soil: p.soil_water_mm, health: p.health }))} selected={sel} onSelect={setSel} />
+      <IsoMap parcels={parcels.map(p => ({ ...p, soil: p.soil_water_mm, health: p.health }))} selected={sel} onSelect={setSel} reservoirM3={info?.reservoir_m3} />
       <section id="panel" aria-label="Panel de parcela" tabIndex={-1} style={{ border: '2px solid #1a6b3c', borderRadius: 12, padding: 12, marginTop: 8 }}>
         <b style={{ fontSize: 18 }}>{cur.id} · {cur.crop} · {VARIEDAD[cur.id]?.v} · {VARIEDAD[cur.id]?.edad} años (juego)</b><br />
         <span style={{ fontSize: 16 }}>Humedad estimada: {cur.soil_water_mm} mm (no medida) · Sanidad juego: {cur.health} · Fruta: {cur.pending_kg} kg · Inventario: {cur.inventory_kg ?? 0} kg · {cur.phenology || ''}</span><br />

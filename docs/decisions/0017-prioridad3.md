@@ -4,7 +4,7 @@ Fecha: 2026-11-10. Estado: flujos web completos en ensayo; publicación condicio
 
 - Web (`apps/web`): finca y avance (día/semana/clima real), agua/inventario/
   economía (riego, cosecha, venta por canal, fertilizante, bloqueo spray),
-  historial con ledger, previsión por intervalos, cuenta SMS simulado, guardado
+  historial con ledger, previsión por intervalos, cuenta con correo y contraseña, guardado
   versionado/backup, sistema (privacidad, profesional, monitorización, checklist).
   API configurable por `VITE_API_URL`; offline deshabilita avanzar/guardar sin
   fingir datos; limitaciones visibles (efímera temporal, ensayo sin garantía).

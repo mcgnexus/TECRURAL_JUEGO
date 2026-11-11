@@ -1,21 +1,24 @@
-"""Fase 6 — Cuentas, autenticación y consentimiento (juego). Proveedores simulados, sin claves en cliente."""
+"""Fase 6 — Cuentas por email y contraseña, consentimiento y guardado (juego). Sin claves en cliente."""
 from __future__ import annotations
+import hashlib
 import re
 import secrets
 import time
-from dataclasses import dataclass, field
 
-PHONE_RE = re.compile(r"^\+\d{7,15}$")  # E.164 genérico; ES habitual +34...
-CODE_TTL_S = 600
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 SESSION_TTL_S = 86400
-MAX_SEND_PER_HOUR = 5
-MAX_VERIFY_ATTEMPTS = 5
+RESET_TTL_S = 1800
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_S = 900
+MIN_PASSWORD_LEN = 8
+PBKDF2_ITERS = 260000
 
 ACCOUNTS: dict[str, dict] = {}  # id -> cuenta
-BY_PHONE: dict[str, str] = {}  # phone -> id
+BY_EMAIL: dict[str, str] = {}  # email normalizado -> id
 SESSIONS: dict[str, dict] = {}  # token -> {account_id, expires}
-OTP: dict[str, dict] = {}  # phone -> {code, expires, attempts, sent:[ts]}
-OUTBOX: list[dict] = []  # SMS simulados enviados (prueba de revocación)
+FAILED: dict[str, dict] = {}  # email -> {attempts, locked_until}
+RESETS: dict[str, dict] = {}  # email -> {token, expires}
+OUTBOX: list[dict] = []  # envíos comerciales simulados (prueba de revocación)
 CONTACTS: dict[str, list] = {}  # account_id -> solicitudes contacto
 VERSIONS: dict[str, list] = {}  # game_id -> [{v, day, state, at}]
 
@@ -24,59 +27,111 @@ def _now() -> float:
     return time.time()
 
 
-def valid_phone(phone: str) -> bool:
-    return bool(PHONE_RE.match(phone or ""))
+def _norm(email: str) -> str:
+    return (email or "").strip().lower()
 
 
-def request_code(phone: str, email: str | None = None, simulated: bool = True) -> dict:
-    """Paso 1 registro: genera código 6 dígitos, límite de envíos. Devuelve código solo en simulado."""
-    if not valid_phone(phone):
-        raise ValueError("teléfono inválido (formato E.164, ej. +34600000001)")
-    if email is not None and ("@" not in email or "." not in email):
+def valid_email(email: str) -> bool:
+    return bool(EMAIL_RE.match(_norm(email) or ""))
+
+
+def _hash(password: str, salt: bytes | None = None) -> tuple[str, str]:
+    salt = salt or secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ITERS)
+    return salt.hex(), dk.hex()
+
+
+def _locked(email: str) -> bool:
+    f = FAILED.get(email)
+    return bool(f and _now() < f.get("locked_until", 0))
+
+
+def register(email: str, password: str) -> dict:
+    """Alta con email y contraseña. La contraseña nunca se guarda en claro."""
+    em = _norm(email)
+    if not valid_email(em):
         raise ValueError("correo inválido")
-    now = _now()
-    o = OTP.get(phone, {"sent": [], "attempts": 0})
-    o["sent"] = [t for t in o.get("sent", []) if now - t < 3600]
-    if len(o["sent"]) >= MAX_SEND_PER_HOUR:
-        raise PermissionError("límite de envíos alcanzado, intente más tarde (protección abuso)")
-    code = f"{secrets.randbelow(900000) + 100000:06d}"
-    o.update({"code": code, "expires": now + CODE_TTL_S, "attempts": 0})
-    o["sent"].append(now)
-    OTP[phone] = o
-    # Alta perezosa de cuenta no verificada (aislada por teléfono)
-    if phone not in BY_PHONE:
-        import uuid
-        aid = uuid.uuid4().hex[:12]
-        BY_PHONE[phone] = aid
-        ACCOUNTS[aid] = {"id": aid, "phone": phone, "email": email, "verified": False,
-                         "created_at": now, "marketing_consent": False, "consent_log": []}
-    elif email:
-        ACCOUNTS[BY_PHONE[phone]]["email"] = email
-    OUTBOX.append({"to": phone, "kind": "otp", "at": now})
-    out = {"ok": True, "nota": "código enviado (simulado en desarrollo). Caduca en 10 min."}
-    if simulated:
-        out["code_debug"] = code  # SOLO desarrollo/tests; jamás en producción real
+    if not password or len(password) < MIN_PASSWORD_LEN:
+        raise ValueError(f"la contraseña debe tener al menos {MIN_PASSWORD_LEN} caracteres")
+    if em in BY_EMAIL:
+        raise ValueError("esa cuenta ya existe; inicie sesión o recupere la contraseña")
+    import uuid
+    aid = uuid.uuid4().hex[:12]
+    salt, digest = _hash(password)
+    BY_EMAIL[em] = aid
+    ACCOUNTS[aid] = {"id": aid, "email": em, "password_salt": salt, "password_hash": digest,
+                     "created_at": _now(), "marketing_consent": False, "consent_log": []}
+    return {"ok": True, "account_id": aid,
+            "nota": "cuenta creada. Tratamiento: guardar partidas y recuperarlas. Ver /privacy."}
+
+
+def login(email: str, password: str) -> dict:
+    """Verifica la contraseña y abre sesión de 24 h. Límite de intentos con bloqueo temporal."""
+    em = _norm(email)
+    if not valid_email(em):
+        raise ValueError("correo inválido")
+    if _locked(em):
+        raise PermissionError("cuenta bloqueada temporalmente por intentos (protección abuso)")
+    aid = BY_EMAIL.get(em)
+    ok = False
+    if aid and (a := ACCOUNTS.get(aid)):
+        salt, digest = _hash(password or "", bytes.fromhex(a["password_salt"]))
+        ok = secrets.compare_digest(digest, a["password_hash"])
+    if not ok:
+        f = FAILED.setdefault(em, {"attempts": 0, "locked_until": 0})
+        f["attempts"] += 1
+        if f["attempts"] >= MAX_LOGIN_ATTEMPTS:
+            f["locked_until"] = _now() + LOCKOUT_S
+        raise ValueError("credenciales incorrectas")
+    FAILED.pop(em, None)
+    token = secrets.token_urlsafe(24)
+    SESSIONS[token] = {"account_id": aid, "expires": _now() + SESSION_TTL_S}
+    return {"token": token, "account_id": aid, "expires_in_s": SESSION_TTL_S,
+            "nota": "sesión válida 24 h. Tratamiento: guardar partidas y recuperarlas. Ver /privacy."}
+
+
+def request_reset(email: str, simulated: bool = True) -> dict:
+    """Solicita restablecer la contraseña. En ensayo devuelve el token (simulado en desarrollo)."""
+    em = _norm(email)
+    if not valid_email(em):
+        raise ValueError("correo inválido")
+    out = {"ok": True, "nota": "si la cuenta existe, se envió un enlace de recuperación (válido 30 min)."}
+    if em in BY_EMAIL:
+        tok = secrets.token_urlsafe(24)
+        RESETS[em] = {"token": tok, "expires": _now() + RESET_TTL_S}
+        if simulated:
+            out["reset_debug"] = tok  # SOLO desarrollo/tests; jamás en producción real
     return out
 
 
-def verify_code(phone: str, code: str) -> dict:
-    """Paso 2: verifica código, marca cuenta verificada y abre sesión con expiración."""
-    now = _now()
-    o = OTP.get(phone)
-    if not o or now > o.get("expires", 0):
-        raise ValueError("código caducado o inexistente, pida uno nuevo (recuperación)")
-    if o.get("attempts", 0) >= MAX_VERIFY_ATTEMPTS:
-        raise PermissionError("cuenta bloqueada temporalmente por intentos (protección abuso)")
-    if str(code) != str(o.get("code")):
-        o["attempts"] = o.get("attempts", 0) + 1
-        raise ValueError("código incorrecto")
-    aid = BY_PHONE[phone]
-    ACCOUNTS[aid]["verified"] = True
-    OTP.pop(phone, None)
-    token = secrets.token_urlsafe(24)
-    SESSIONS[token] = {"account_id": aid, "expires": now + SESSION_TTL_S}
-    return {"token": token, "account_id": aid, "expires_in_s": SESSION_TTL_S,
-            "nota": "sesión válida 24 h. Tratamiento: guardar partidas y recuperarlas. Ver /privacy."}
+def reset_password(email: str, token: str, password: str) -> dict:
+    """Fija una contraseña nueva con el token de recuperación."""
+    em = _norm(email)
+    r = RESETS.get(em)
+    if not r or _now() > r.get("expires", 0):
+        raise ValueError("enlace caducado o inexistente, pida uno nuevo (recuperación)")
+    if not secrets.compare_digest(str(token), str(r.get("token"))):
+        raise ValueError("enlace inválido")
+    if not password or len(password) < MIN_PASSWORD_LEN:
+        raise ValueError(f"la contraseña debe tener al menos {MIN_PASSWORD_LEN} caracteres")
+    aid = BY_EMAIL.get(em)
+    if not aid or aid not in ACCOUNTS:
+        raise KeyError("cuenta no encontrada")
+    salt, digest = _hash(password)
+    ACCOUNTS[aid]["password_salt"] = salt
+    ACCOUNTS[aid]["password_hash"] = digest
+    RESETS.pop(em, None)
+    FAILED.pop(em, None)
+    for tok, s in list(SESSIONS.items()):
+        if s["account_id"] == aid:
+            SESSIONS.pop(tok, None)
+    return {"ok": True, "nota": "contraseña actualizada; sesiones anteriores cerradas."}
+
+
+def logout(token: str | None) -> dict:
+    if token:
+        SESSIONS.pop(token, None)
+    return {"ok": True}
 
 
 def account_from_token(token: str | None) -> dict | None:
@@ -105,7 +160,7 @@ def send_commercial(account_id: str, body: str) -> bool:
     a = ACCOUNTS.get(account_id)
     if not a or not a.get("marketing_consent"):
         return False
-    OUTBOX.append({"to": a["phone"], "kind": "comercial", "body": body, "at": _now()})
+    OUTBOX.append({"to": a["email"], "kind": "comercial", "body": body, "at": _now()})
     return True
 
 
@@ -113,19 +168,20 @@ def export_account(account_id: str) -> dict:
     a = ACCOUNTS.get(account_id)
     if not a:
         raise KeyError("cuenta no encontrada")
-    return {"cuenta": {k: v for k, v in a.items()},
+    safe = {k: v for k, v in a.items() if k not in ("password_salt", "password_hash")}
+    return {"cuenta": safe,
             "contactos": CONTACTS.get(account_id, []),
-            "nota": "exportación RGPD: datos de la cuenta y solicitudes de contacto"}
+            "nota": "exportación RGPD: datos de la cuenta y solicitudes de contacto (sin credenciales)"}
 
 
 def delete_account(account_id: str) -> dict:
     for tok, s in list(SESSIONS.items()):
         if s["account_id"] == account_id:
             SESSIONS.pop(tok, None)
-    phone = ACCOUNTS[account_id]["phone"]
+    email = ACCOUNTS[account_id]["email"]
     CONTACTS.pop(account_id, None)
     ACCOUNTS.pop(account_id, None)
-    BY_PHONE.pop(phone, None)
+    BY_EMAIL.pop(email, None)
     return {"ok": True, "nota": "cuenta, sesiones y contactos borrados"}
 
 

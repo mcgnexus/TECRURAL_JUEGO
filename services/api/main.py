@@ -154,7 +154,7 @@ def _require_me(authorization: str | None = None) -> dict:
     tok = _bearer(authorization)
     a = AC.account_from_token(tok)
     if not a:
-        raise HTTPException(401, "sesión requerida o caducada (verificación por código, expira en 24 h)")
+        raise HTTPException(401, "sesión requerida o caducada (inicie sesión; expira en 24 h)")
     return a
 
 
@@ -203,8 +203,8 @@ def create_game(body: NewGame, authorization: str | None = Header(default=None))
     me = _me(authorization)
     gid = uuid.uuid4().hex[:8]
     st = _new_state()
-    # Teléfono verificado obligatorio para guardar: solo con sesión verificada la partida deja de ser efímera
-    if me and me.get("verified"):
+    # Cuenta con sesión obligatoria para guardar: solo con sesión la partida deja de ser efímera
+    if me:
         g = {"state": st, "account": me["id"], "ephemeral": False, "seed": 1234}
     else:
         g = {"state": st, "account": body.account, "ephemeral": body.account is None, "seed": 1234}
@@ -531,14 +531,24 @@ def treatment(req: TreatmentReq):
 
 # ---------- Fase 6: cuentas, guardado versionado, consentimiento, CRM bloqueado ----------
 
-class RequestCode(BaseModel):
-    phone: str = Field(description="E.164, ej. +34600000001. No se solicita DNI.")
-    email: str | None = None
+class RegisterBody(BaseModel):
+    email: str = Field(description="Correo de la cuenta. No se solicita DNI.")
+    password: str = Field(min_length=8, description="Mínimo 8 caracteres.")
 
 
-class VerifyCode(BaseModel):
-    phone: str
-    code: str = Field(min_length=6, max_length=6)
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+class RecoverBody(BaseModel):
+    email: str
+
+
+class ResetBody(BaseModel):
+    email: str
+    token: str
+    password: str = Field(min_length=8)
 
 
 class ConsentBody(BaseModel):
@@ -546,7 +556,7 @@ class ConsentBody(BaseModel):
 
 
 class ContactBody(BaseModel):
-    medio: str = Field(description="telefono|correo")
+    medio: str = Field(description="correo|telefono")
     valor: str
     finalidad: str = Field(min_length=10, description="finalidad clara y concreta")
     mensaje: str | None = None
@@ -561,22 +571,20 @@ class RestoreBody(BaseModel):
 ANALYTICS: dict[str, int] = {}
 
 
-@app.post("/accounts/request_code")
-def accounts_request(body: RequestCode):
+@app.post("/accounts/register")
+def accounts_register(body: RegisterBody):
     if "dni" in (body.model_dump() or {}):
         raise HTTPException(422, "no se solicita DNI")
     try:
-        return AC.request_code(body.phone, body.email, simulated=True)
+        return AC.register(body.email, body.password)
     except ValueError as e:
         raise HTTPException(422, str(e))
-    except PermissionError as e:
-        raise HTTPException(429, str(e))
 
 
-@app.post("/accounts/verify")
-def accounts_verify(body: VerifyCode):
+@app.post("/accounts/login")
+def accounts_login(body: LoginBody):
     try:
-        return AC.verify_code(body.phone, body.code)
+        return AC.login(body.email, body.password)
     except ValueError as e:
         raise HTTPException(422, str(e))
     except PermissionError as e:
@@ -584,16 +592,34 @@ def accounts_verify(body: VerifyCode):
 
 
 @app.post("/accounts/recover")
-def accounts_recover(body: RequestCode):
-    return accounts_request(body)
+def accounts_recover(body: RecoverBody):
+    try:
+        return AC.request_reset(body.email, simulated=True)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.post("/accounts/reset")
+def accounts_reset(body: ResetBody):
+    try:
+        return AC.reset_password(body.email, body.token, body.password)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/accounts/logout")
+def accounts_logout(authorization: str | None = Header(default=None)):
+    return AC.logout(_bearer(authorization))
 
 
 @app.get("/accounts/me")
 def accounts_me(authorization: str | None = Header(default=None)):
     a = _require_me(authorization)
-    return {"id": a["id"], "phone": a["phone"], "verified": a["verified"],
+    return {"id": a["id"], "email": a["email"],
             "marketing_consent": a["marketing_consent"],
-            "nota": "tratamiento: guardar partidas y recuperarlas. Recuperación por nuevo código."}
+            "nota": "tratamiento: guardar partidas y recuperarlas. Recuperación por correo."}
 
 
 @app.get("/accounts/me/export")
@@ -625,8 +651,8 @@ def contact(body: ContactBody, authorization: str | None = Header(default=None))
 @app.get("/privacy")
 def privacy():
     return {
-        "tratamiento": "teléfono verificado para guardar/recuperar partidas; correo opcional. Sin DNI.",
-        "recuperacion": "nuevo código SMS simulado; sesiones 24 h; propietario verifica acceso a sus partidas.",
+        "tratamiento": "cuenta con correo y contraseña para guardar/recuperar partidas. Sin DNI.",
+        "recuperacion": "enlace de recuperación por correo (30 min); sesiones 24 h; propietario verifica acceso a sus partidas.",
         "retencion": "partidas y versiones hasta borrado de cuenta; copias en Neon si hay DATABASE_URL.",
         "derechos": "acceso/exportación/borrado en /accounts/me. Contacto: pendiente definir con asesor.",
         "marketing": "consentimiento separado, opcional, no premarcado, revocable; revocación detiene envíos.",
@@ -640,7 +666,7 @@ def privacy():
 def game_save(gid: str, authorization: str | None = Header(default=None)):
     g = _get(gid, authorization)
     if g.get("ephemeral"):
-        raise HTTPException(422, "partida efímera: verifique teléfono para guardar versionado")
+        raise HTTPException(422, "partida efímera: inicie sesión para guardar versionado")
     return AC.save_version(gid, g["state"] and __import__("dataclasses").asdict(g["state"]))
 
 

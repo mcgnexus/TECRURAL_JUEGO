@@ -90,8 +90,8 @@ def test_replay_identico_y_huecos_de_extremo_a_extremo():
     from services.api.main import app
     import services.ingestion.scenarios as SC
     c = TestClient(app)
-    tok = c.post("/accounts/request_code", json={"phone": "+34600111111"}).json()["code_debug"]
-    tok = c.post("/accounts/verify", json={"phone": "+34600111111", "code": tok}).json()["token"]
+    c.post("/accounts/register", json={"email": "prior2@ejemplo.es", "password": "Secreta01"})
+    tok = c.post("/accounts/login", json={"email": "prior2@ejemplo.es", "password": "Secreta01"}).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     # Hueco: serie con ET0 ausente → 422 sin permitir_ficticio, degradado etiquetado con él
     real = SC.presente_con_prevision

@@ -1,15 +1,15 @@
-# Privacidad y captación — juego (Fase 6, pendiente asesor antes de producción)
+# Privacidad y captación — juego (Fase 6 revisada: cuenta por correo y contraseña)
 
 ## Datos
-Teléfono verificado (E.164) para guardar/recuperar; correo opcional. No se solicita DNI.
-Finalidad: cuenta de juego, nunca recomendación real.
+Cuenta con correo y contraseña (mínimo 8 caracteres, guardada con hash+salt, nunca en claro). No se solicita DNI ni teléfono.
+Finalidad: guardar partidas y recuperarlas, nunca recomendación real.
 
 ## Sesiones y abuso
-Códigos 6 dígitos/10 min, 5 envíos por hora, 5 intentos, bloqueo temporal.
-Sesiones opacas 24 h por cabecera Bearer. Sin secretos en cliente ni logs.
+Contraseña con hash PBKDF2+salt, 5 intentos de acceso con bloqueo temporal de 15 min.
+Sesiones opacas 24 h por cabecera Bearer. Sin secretos ni contraseñas en cliente ni logs.
 
 ## Guardado
-Efímera sin cuenta; con cuenta verificada: versionado, restauración con 409 ante
+Efímera sin cuenta; con cuenta y sesión: versionado, restauración con 409 ante
 conflicto salvo `force`, backup exportable e importable con migración de esquemas
 antiguos (v1/v2 → v3 por `_restore_state`).
 
@@ -24,4 +24,4 @@ elimina cuenta+sesiones+contactos). Retención: hasta borrado. Analítica solo a
 
 ## Pendiente producción
 Política de privacidad, contratos encargados, retención detallada, canales de contacto
-y reglas del canal SMS/correo con asesor competente; verificar legislación aplicable.
+y reglas del canal de correo con asesor competente; verificar legislación aplicable.

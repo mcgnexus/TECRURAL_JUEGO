@@ -30,8 +30,8 @@ def test_seguridad_cuentas_aisladas_y_recuperacion():
     from fastapi.testclient import TestClient
     from services.api.main import app
     c = TestClient(app)
-    code = c.post("/accounts/request_code", json={"phone": "+34600800001"}).json()["code_debug"]
-    tok = c.post("/accounts/verify", json={"phone": "+34600800001", "code": code}).json()["token"]
+    c.post("/accounts/register", json={"email": "fase89a@ejemplo.es", "password": "Secreta01"})
+    tok = c.post("/accounts/login", json={"email": "fase89a@ejemplo.es", "password": "Secreta01"}).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     g = c.post("/games", json={}, headers=h).json()["game_id"]
     assert c.get(f"/games/{g}", headers={"Authorization": "Bearer xxx"}).status_code in (401, 403)
@@ -40,8 +40,8 @@ def test_gemelo_piloto_simulado():
     from fastapi.testclient import TestClient
     from services.api.main import app
     c = TestClient(app)
-    code = c.post("/accounts/request_code", json={"phone": "+34600800002"}).json()["code_debug"]
-    tok = c.post("/accounts/verify", json={"phone": "+34600800002", "code": code}).json()["token"]
+    c.post("/accounts/register", json={"email": "fase89b@ejemplo.es", "password": "Secreta01"})
+    tok = c.post("/accounts/login", json={"email": "fase89b@ejemplo.es", "password": "Secreta01"}).json()["token"]
     h = {"Authorization": f"Bearer {tok}"}
     # Sin autorización verificable se rechaza
     assert c.post("/twin/import", json={"finca_id": "F", "owner_id": "", "permiso_ref": "", "limites": {}},
